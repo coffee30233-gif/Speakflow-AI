@@ -1,0 +1,23 @@
+# dependencies
+node_modules
+
+# next.js
+.next
+out
+
+# production
+build
+
+# env
+.env
+.env.local
+.env*.local
+
+# pwa generated files (Serwist)
+public/sw*
+public/swe-worker*
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
