@@ -6,6 +6,7 @@ import { useRecallPractice, type RecallLevel } from "@/hooks/useRecallPractice";
 import { RecallCanvas } from "@/components/practice/RecallCanvas";
 import { RecallEvaluationBars } from "@/components/practice/RecallEvaluationBars";
 import { GrammarFeedbackList } from "@/components/practice/GrammarFeedbackList";
+import { AudioReplyPlayer } from "@/components/practice/AudioReplyPlayer";
 import { computeVisibleNodeIds } from "@/lib/mindmap/build-mindmap";
 import type { MindMapNode, MindMapEdge } from "@/lib/mindmap/types";
 
@@ -146,6 +147,7 @@ export function RecallSessionClient({
             <div className="bg-primary/5 border-primary/20 rounded-lg border p-3 text-sm">
               <p className="text-muted-foreground mb-1 text-xs">教練回饋</p>
               <p>{feedback.aiReplyText}</p>
+              <AudioReplyPlayer audioUrl={feedback.aiReplyAudioUrl} />
             </div>
 
             <div className="flex gap-2">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useShadowingPractice } from "@/hooks/useShadowingPractice";
 import { PronunciationScoreRing } from "@/components/practice/PronunciationScoreRing";
 import { GrammarFeedbackList } from "@/components/practice/GrammarFeedbackList";
+import { AudioReplyPlayer } from "@/components/practice/AudioReplyPlayer";
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   beginner: "初級",
@@ -112,6 +113,7 @@ export function ShadowingPracticeClient() {
               <div className="bg-primary/5 border-primary/20 rounded-lg border p-3 text-sm">
                 <p className="text-muted-foreground mb-1 text-xs">AI 教練回饋</p>
                 <p>{feedback.aiReplyText}</p>
+                <AudioReplyPlayer audioUrl={feedback.aiReplyAudioUrl} />
               </div>
             )}
 

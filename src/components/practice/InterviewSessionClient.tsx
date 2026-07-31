@@ -6,6 +6,7 @@ import { useInterviewPractice } from "@/hooks/useInterviewPractice";
 import { PronunciationScoreRing } from "@/components/practice/PronunciationScoreRing";
 import { GrammarFeedbackList } from "@/components/practice/GrammarFeedbackList";
 import { InterviewEvaluationBars } from "@/components/practice/InterviewEvaluationBars";
+import { AudioReplyPlayer } from "@/components/practice/AudioReplyPlayer";
 import type { DifficultyLevel } from "@/lib/interview/types";
 
 interface InterviewSessionClientProps {
@@ -155,6 +156,7 @@ export function InterviewSessionClient({
             <div className="bg-primary/5 border-primary/20 rounded-lg border p-3 text-sm">
               <p className="text-muted-foreground mb-1 text-xs">面試官回應</p>
               <p>{feedback.aiReplyText}</p>
+              <AudioReplyPlayer audioUrl={feedback.aiReplyAudioUrl} />
             </div>
 
             <div className="flex gap-2 pt-2">

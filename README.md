@@ -110,6 +110,25 @@ AIProvider 介面  src/lib/ai/types.ts
   - `/practice/mindmap/view/[mindMapId]/recall`：選層級 → 看提示漸進展開 → 開口回答 →
     AI 評「回憶完整度」跟「自然度」（不是評文法對錯，是評有沒有想起關鍵內容）
   - **還沒做**：Progress 統計視覺化（時間/完整度趨勢）、Coach Notes（跨 session 記憶）——這是 Phase D 的範圍
+- [x] **V1 Phase D-1：TTS 語音合成**：
+  - `GeminiProvider.textToSpeech()` 真正接上 `gemini-3.1-flash-tts-preview`
+  - Gemini TTS 回傳的是**裸 PCM 音訊**（沒有檔頭，瀏覽器無法直接播放），
+    新增 `src/lib/audio/pcm-to-wav.ts` 手動包 WAV 檔頭（已用 Node 腳本驗證過檔頭格式正確）
+  - **架構決策**：`processSpeech()` 現在會自動幫 `aiReplyText` 合成語音，
+    附加在 `SpeechProcessResult.aiReplyAudioUrl`——**所有模式**（跟讀/面試/Recall）都會有語音回覆，
+    不是只有特定模式才有
+  - `session_turns.ai_reply_audio_url`（Phase A 就建好、一直沒用到的欄位）現在真的有東西寫進去了
+  - 三個練習頁面都加了 `AudioReplyPlayer`（手動播放按鈕，**刻意不用 autoplay**——
+    iOS Safari 對自動播放音訊管得嚴，非同步 fetch 完成後才觸發的播放不保證不被擋掉）
+  - 教練聲音固定用同一個聲音（`Kore`），不管使用者選哪個文字生成模型都一樣——
+    這是為了「教練是同一個人」的體感，之後如果要換聲音只要改一個常數
+  - ⚠️ **老實說的取捨**：現在是直接回傳 base64 data URI，**沒有存進 Supabase Storage**
+    （雖然 `session-audio` bucket 早就建好了）。data URI 直接塞進 `session_turns` 的 text 欄位，
+    每輪對話都會讓這張表變胖（一段幾秒的語音 base64 編碼後可能好幾十 KB）。
+    這是為了先讓功能動起來的簡化，之後如果資料庫大小變成問題，
+    要改成上傳到 Storage、存簽名 URL，不難但這次沒做
+  - ⚠️ **延遲/成本會變高**：現在每一輪對話等於多打一次 AI API（結構化評分 + 語音合成，
+    循序執行不是平行的），使用者會感覺回饋變慢一點，這是純語音功能的必然代價
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

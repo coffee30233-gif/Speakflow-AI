@@ -86,6 +86,12 @@ export interface SpeechProcessResult {
   pronunciationScore?: number;
   grammarFeedback?: GrammarFeedbackItem[];
   aiReplyText: string;
+  /**
+   * AI 回覆的語音（data URI 或音檔 URL），由 textToSpeech() 合成後附加上去，
+   * 不是 LLM 結構化輸出的一部分——合成失敗時這個欄位就是 undefined，
+   * 不應該讓整個 processSpeech 失敗（使用者還是要看得到文字回饋）。
+   */
+  aiReplyAudioUrl?: string;
   /** 僅 interview 模式會填寫 */
   interviewEvaluation?: InterviewEvaluation;
   /** 僅 recall 模式會填寫 */

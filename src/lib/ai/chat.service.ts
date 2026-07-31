@@ -54,6 +54,7 @@ export class ChatService {
         pronunciation_score: result.pronunciationScore ?? null,
         grammar_feedback: result.grammarFeedback ?? [],
         ai_reply_text: result.aiReplyText,
+        ai_reply_audio_url: result.aiReplyAudioUrl ?? null,
       })
       .select("id")
       .single();
