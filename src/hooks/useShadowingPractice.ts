@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAudioRecorder, blobToBase64 } from "@/hooks/useAudioRecorder";
 import { getRandomSentence, type ShadowingSentence } from "@/lib/shadowing/sentences";
+import { createLearningSession, endLearningSession } from "@/lib/session/client";
 import type { SpeechProcessResult } from "@/lib/ai/types";
 
 export type ShadowingPhase = "ready" | "recording" | "processing" | "feedback" | "error";
 
 /**
  * 目前先固定用 Gemini 2.5 Flash。
- * TODO：接上 Supabase Auth + profiles.preferred_ai_model 後，
- * 這裡要改成讀使用者的設定值，讓雙模型切換真正生效。
+ * TODO：接上 profiles.preferred_ai_model 後，這裡要改成讀使用者的設定值，
+ * 讓雙模型切換真正生效。
  */
 const DEFAULT_PROVIDER_ID = "gemini-2.5-flash";
 
@@ -34,17 +35,42 @@ export function useShadowingPractice(): UseShadowingPracticeResult {
 
   const recorder = useAudioRecorder();
 
+  // 一次「跟讀練習」對應一個 learning_sessions 資料列，session 建立後整段練習都沿用同一個，
+  // 每一句（含重錄）都是這個 session 底下的一個 turn。
+  const sessionIdRef = useRef<string | null>(null);
+  const turnIndexRef = useRef(0);
+
+  const ensureSession = useCallback(async (): Promise<string> => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    const sessionId = await createLearningSession("shadowing", DEFAULT_PROVIDER_ID);
+    sessionIdRef.current = sessionId;
+    return sessionId;
+  }, []);
+
   const startRecording = useCallback(async () => {
     setErrorMessage(null);
     setFeedback(null);
+
+    try {
+      await ensureSession();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "無法建立練習紀錄，請確認已登入");
+      setPhase("error");
+      return;
+    }
+
     setPhase("recording");
     await recorder.start();
-  }, [recorder]);
+  }, [recorder, ensureSession]);
 
   const submitRecording = useCallback(
     async (blob: Blob, mimeType: string) => {
       setPhase("processing");
       try {
+        const sessionId = await ensureSession();
+        const turnIndex = turnIndexRef.current;
+        turnIndexRef.current += 1;
+
         const audioBase64 = await blobToBase64(blob);
         const res = await fetch("/api/speech-process", {
           method: "POST",
@@ -56,6 +82,8 @@ export function useShadowingPractice(): UseShadowingPracticeResult {
             audioFormat: mimeType,
             contextTurns: [],
             targetSentence: sentence.text,
+            sessionId,
+            turnIndex,
           }),
         });
 
@@ -72,7 +100,7 @@ export function useShadowingPractice(): UseShadowingPracticeResult {
         setPhase("error");
       }
     },
-    [sentence.text],
+    [sentence.text, ensureSession],
   );
 
   const stopAndSubmit = useCallback(() => {
@@ -116,6 +144,16 @@ export function useShadowingPractice(): UseShadowingPracticeResult {
     setSentence((prev) => getRandomSentence(prev.id));
     setPhase("ready");
   }, [recorder]);
+
+  // 離開頁面時，把目前的練習 session 標記為結束（best-effort，不阻塞 UI）
+  useEffect(() => {
+    return () => {
+      if (sessionIdRef.current) {
+        void endLearningSession(sessionIdRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     phase,

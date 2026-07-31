@@ -52,8 +52,51 @@ AIProvider 介面  src/lib/ai/types.ts
 - [x] Supabase Database Schema、RLS Policy、Storage Bucket（見 `supabase/README.md`）
 - [ ] 實際在 Supabase 專案執行 migration（需要你有 Supabase 專案並填好 `.env.local`）
 - [ ] Supabase Auth 登入流程（UI + 串接）
+- [x] **Supabase Auth 登入流程**：
+  - `/login`：登入／註冊頁面（Email + 密碼），用 Server Actions（`src/app/login/actions.ts`）
+  - `/auth/confirm`：Email 驗證連結的 Route Handler
+  - 首頁會顯示登入狀態（`已登入：xxx@example.com`）與登入／登出入口
+  - **`/practice/*` 目前沒有強制要求登入**——這是刻意的，等 ChatService 接上資料庫寫入時，
+    才需要真的擋未登入使用者（不然 session 沒有 user_id 可以寫）
+  - ⚠️ **需要你在 Supabase Dashboard 手動做兩件事，程式碼沒辦法幫你設定**：
+    1. Auth → Email Templates → *Confirm signup*：把 `{{ .ConfirmationURL }}` 改成
+       `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
+    2. Auth → URL Configuration：把 *Site URL* 設成你的正式網域（Vercel 網址），
+       並在 *Redirect URLs* 加入該網域，不然驗證信裡的連結會連到錯的地方（例如 localhost）
+
+## 關於 Next.js 16 的一個提醒（目前不影響你，但之後升級要注意）
+
+Next.js 16 把 `middleware.ts` 這個檔案慣例改名成 `proxy.ts`（函式也從 `middleware` 改叫 `proxy`）。
+這個專案的 `package.json` 鎖定 `next: "^15.1.0"`（不會自動跳大版本），所以現有的
+`src/middleware.ts` 目前完全正常。只是提醒你：**之後如果要升級到 Next.js 16**，
+需要把 `middleware.ts` 重新命名成 `proxy.ts`、函式名稱也要改，
+Next.js 官方有提供自動轉換工具：`npx @next/codemod@canary middleware-to-proxy .`
 - [x] 跟讀模式（Shadowing）正式 UI（`/practice/shadowing`）——**目前不會存進資料庫**，重整頁面歷史就消失，等 ChatService 接上 DB 寫入後才會補上
 - [ ] 把 ChatService 接上 `learning_sessions` / `session_turns` / `usage_logs` 寫入
+- [x] **ChatService 接上資料庫寫入**：
+  - `POST /api/sessions`：建立一場練習（跟讀／面試共用），回傳 `sessionId`
+  - `PATCH /api/sessions/[id]`：結束練習
+  - `ChatService.processSpeech` 現在會實際寫入 `session_turns`（用使用者自己 session 綁定的
+    client，靠 RLS 把關）跟 `usage_logs`（用 admin client，因為這張表不開放一般使用者寫入）
+  - **連帶影響**：`/api/speech-process`、`/practice/shadowing`、`/practice/interview*`
+    現在都要求登入，沒登入會被導去 `/login`（並在登入成功後導回原本要去的頁面）
+  - `session_turns` 寫入失敗不會讓使用者拿不到 AI 回饋（只記 log，不擋回應）；
+    `usage_logs` 同理，因為那兩張表的資料遺失不影響當下的使用體驗，只影響「之後看不看得到歷史紀錄」
+  - **還沒做**：`/history` 歷史紀錄頁面（資料現在已經有在存了，但還沒有 UI 可以看）
+- [x] **面試教練模式架構**（第四種練習模式，與跟讀/自由對話/情境並存）：
+  - `companies/`：公司知識庫內容（純資料，目前只有 `asml/`），新增公司步驟見 `companies/README.md`
+  - `src/lib/interview/`：知識庫解析器、公司註冊表（fs 動態掃描）、面試 Prompt Builder
+  - `src/lib/ai/types.ts` 的 `PracticeMode` 新增 `"interview"`，`SpeechProcessInput` 新增 `interviewContext`
+  - `GeminiProvider` / `OpenAIProvider` **完全沒有修改**——它們只呼叫 `buildSpeechPrompt()`，
+    面試模式的邏輯全部在 `lib/interview` 這一層，Provider Pattern 的邊界保持乾淨
+  - `next.config.ts` 加了 `outputFileTracingIncludes`，確保 Vercel 會把 `companies/` 打包進 serverless function
+  - **還沒做**：面試模式的 UI 畫面（公司/職位/難度選擇）、履歷上傳功能
+- [x] **面試教練模式 UI**：
+  - `/practice/interview`：設定頁（Server Component，直接讀 `listAllCompanies()`）
+  - `/practice/interview/session`：模擬面試互動頁，第一題從知識庫的
+    `Behavioral Interview Topics` 直接挑（不額外打一次 AI API），
+    之後每一輪都是「使用者回答 → AI 評分＋給下一題」的循環
+  - 一樣**不會存進資料庫**，跟跟讀模式目前的限制相同
 
 ## PWA 實作細節（Serwist）
 

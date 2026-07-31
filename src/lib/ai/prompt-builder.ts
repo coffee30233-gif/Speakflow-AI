@@ -1,5 +1,6 @@
 import "server-only";
 import type { SpeechProcessInput } from "@/lib/ai/types";
+import { buildInterviewPrompt } from "@/lib/interview/prompt-builder";
 
 /**
  * 依練習模式組出對應的 system instruction。
@@ -26,6 +27,15 @@ export function buildSpeechPrompt(input: SpeechProcessInput): string {
       return `${base}\n\n模式：情境任務。你要扮演的角色設定如下：\n${
         input.scenarioSystemPrompt ?? ""
       }\n\n對話脈絡：\n${formatContext(input.contextTurns)}`;
+    case "interview": {
+      if (!input.interviewContext) {
+        throw new Error("interview 模式必須提供 interviewContext");
+      }
+      // 面試模式的 prompt 邏輯完全獨立在 lib/interview 底下維護，
+      // 這裡只負責「轉發」，不重複組裝邏輯——這是刻意的模組邊界劃分：
+      // lib/ai 只管「怎麼跟 AI 溝通」，lib/interview 只管「面試教練這個功能怎麼運作」。
+      return buildInterviewPrompt(input.interviewContext, input.contextTurns);
+    }
     default:
       return base;
   }

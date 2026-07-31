@@ -18,7 +18,7 @@ export interface ChatTurn {
   text: string;
 }
 
-export type PracticeMode = "shadowing" | "freetalk" | "scenario";
+export type PracticeMode = "shadowing" | "freetalk" | "scenario" | "interview";
 
 export interface GrammarFeedbackItem {
   original: string;
@@ -40,6 +40,13 @@ export interface SpeechProcessInput {
   targetSentence?: string;
   /** scenario 模式下，AI 扮演角色的設定（可選） */
   scenarioSystemPrompt?: string;
+  /**
+   * interview 模式下的完整上下文（公司/職位/履歷/難度/面試模式）。
+   * 型別定義在 @/lib/interview/types，這裡刻意用 unknown 避免
+   * lib/ai 這一層（Provider Pattern 核心）反過來依賴 lib/interview，
+   * 保持模組邊界清楚：interview 是「用」ai provider，不是 ai provider 的一部分。
+   */
+  interviewContext?: import("@/lib/interview/types").InterviewContext;
 }
 
 /** processSpeech 的統一回傳格式，不論底層是哪個供應商，回傳結構都相同 */

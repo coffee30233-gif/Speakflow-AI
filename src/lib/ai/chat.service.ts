@@ -1,5 +1,7 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAIProvider } from "@/lib/ai/provider.factory";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SpeechProcessInput, SpeechProcessResult } from "@/lib/ai/types";
 
 /**
@@ -15,21 +17,72 @@ import type { SpeechProcessInput, SpeechProcessResult } from "@/lib/ai/types";
  *   - 回應快取
  * 都只需要修改這一個檔案，UI 完全不受影響。
  */
+
+export interface ProcessSpeechMeta {
+  userId: string;
+  sessionId: string;
+  /** 這是這場 session 裡的第幾輪（從 0 開始），用來對應 session_turns.turn_index */
+  turnIndex: number;
+}
+
 export class ChatService {
   /**
-   * 處理一輪語音互動。
+   * 處理一輪語音互動，並把結果寫進資料庫。
+   *
    * @param providerId 使用者當前選擇的模型，例如 "gemini-2.5-flash" 或 "gpt-5.5"
+   * @param supabase 這次請求「綁定使用者 session」的 Supabase client（來自 lib/supabase/server.ts），
+   *   用這個 client 寫 session_turns，才能讓 RLS 的 insert policy 正常生效。
+   *   不能傳 admin client 進來，那樣就繞過 RLS 了，等於自己放棄了資料庫層的保護。
    */
   async processSpeech(
     providerId: string,
     input: SpeechProcessInput,
+    meta: ProcessSpeechMeta,
+    supabase: SupabaseClient,
   ): Promise<SpeechProcessResult> {
     const provider = getAIProvider(providerId);
-
     const result = await provider.processSpeech(input);
 
-    // TODO: 未來在此處寫入 usage_logs（Firestore），記錄使用的 provider / 預估成本
-    // TODO: 未來在此處寫入 session_turns
+    // 寫入 session_turns：用使用者自己的 session client，
+    // RLS policy 會檢查這個 session_id 底下的 learning_sessions.user_id 是不是這個使用者。
+    const { data: turnRow, error: turnError } = await supabase
+      .from("session_turns")
+      .insert({
+        session_id: meta.sessionId,
+        turn_index: meta.turnIndex,
+        transcript: result.transcript,
+        pronunciation_score: result.pronunciationScore ?? null,
+        grammar_feedback: result.grammarFeedback ?? [],
+        ai_reply_text: result.aiReplyText,
+      })
+      .select("id")
+      .single();
+
+    if (turnError) {
+      // 寫入失敗不應該讓整個回應失敗——使用者已經拿到 AI 的回饋了，
+      // 存檔失敗頂多是「這輪沒有歷史紀錄」，不應該讓使用者連結果都看不到。
+      // 這裡選擇記錄錯誤但繼續回傳結果，而不是 throw。
+      console.error("[ChatService] failed to write session_turns:", turnError);
+    }
+
+    // 寫入 usage_logs：這張表刻意不開放一般使用者 insert（避免竄改用量），
+    // 所以這裡固定用 admin client（service role），不是傳進來的使用者 client。
+    try {
+      const admin = createAdminClient();
+      const { error: usageError } = await admin.from("usage_logs").insert({
+        user_id: meta.userId,
+        session_turn_id: turnRow?.id ?? null,
+        provider: provider.id.startsWith("gemini") ? "gemini" : "openai",
+        model: provider.id,
+      });
+      if (usageError) {
+        console.error("[ChatService] failed to write usage_logs:", usageError);
+      }
+    } catch (err) {
+      // SUPABASE_SERVICE_ROLE_KEY 沒設定時 createAdminClient() 會 throw，
+      // 這種情況下不應該讓整個功能掛掉，只記錄錯誤即可（usage_logs 純粹是內部監控用途）。
+      console.error("[ChatService] admin client unavailable, skipping usage_logs:", err);
+    }
 
     return result;
   }
