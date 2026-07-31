@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { AVAILABLE_PROVIDER_IDS } from "@/lib/ai/provider.factory";
 
 /**
  * POST /api/sessions
@@ -13,7 +14,9 @@ import { createClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   mode: z.enum(["shadowing", "freetalk", "scenario", "interview"]),
-  aiModelUsed: z.enum(["gemini-2.5-flash", "gpt-5.5"]),
+  // 合法的模型 id 直接從 provider.factory 取得，跟 /api/speech-process 共用同一個來源，
+  // 避免兩邊各寫一份列表，改了型號卻忘記同步更新。
+  aiModelUsed: z.enum(AVAILABLE_PROVIDER_IDS as [string, ...string[]]),
   scenarioId: z.string().optional(),
 });
 

@@ -7,9 +7,10 @@ import type {
 } from "@/lib/ai/types";
 import { buildSpeechPrompt } from "@/lib/ai/prompt-builder";
 import { speechProcessResultSchema } from "@/lib/ai/schemas";
+import { requiresTechnicalEvaluation } from "@/lib/interview/prompt-builder";
 
 /**
- * Gemini 2.5 Flash Provider
+ * Gemini 3 Flash Provider
  *
  * 注意：這個檔案只能在 Server 端執行（route.ts / server actions），
  * 依賴 "server-only" 套件在編譯期防止被誤 import 進前端 bundle。
@@ -20,7 +21,7 @@ import { speechProcessResultSchema } from "@/lib/ai/schemas";
  * 不需要「錄音→轉文字→再丟給LLM」的兩段式管線。
  */
 
-const MODEL_ID = "gemini-2.5-flash";
+const MODEL_ID = "gemini-3-flash-preview";
 
 /**
  * Gemini 官方文件列出的支援音訊格式：wav / mp3 / aiff / aac / ogg / flac。
@@ -39,8 +40,8 @@ const KNOWN_SUPPORTED_MIME_TYPES = new Set([
 ]);
 
 export class GeminiProvider implements AIProvider {
-  readonly id = "gemini-2.5-flash";
-  readonly displayName = "Gemini 2.5 Flash（免費⚡）";
+  readonly id = "gemini-3-flash-preview";
+  readonly displayName = "Gemini 3 Flash（免費⚡）";
 
   private readonly client: GoogleGenAI;
 
@@ -62,6 +63,61 @@ export class GeminiProvider implements AIProvider {
 
     const prompt = buildSpeechPrompt(input);
 
+    const isInterview = input.mode === "interview";
+    const isTechnicalInterview =
+      isInterview && !!input.interviewContext && requiresTechnicalEvaluation(input.interviewContext.interviewMode);
+
+    const baseProperties: Record<string, unknown> = {
+      transcript: {
+        type: Type.STRING,
+        description: "使用者語音的逐字稿",
+      },
+      pronunciationScore: {
+        type: Type.NUMBER,
+        description: "發音評分，0-100",
+      },
+      grammarFeedback: {
+        type: Type.ARRAY,
+        description: "文法／用字修正建議，若無錯誤則為空陣列",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            original: { type: Type.STRING },
+            suggestion: { type: Type.STRING },
+            reason: { type: Type.STRING },
+          },
+          required: ["original", "suggestion", "reason"],
+        },
+      },
+      aiReplyText: {
+        type: Type.STRING,
+        description: "教練口吻的回應或延續對話的下一句",
+      },
+    };
+
+    // interview 模式才要求模型多回傳 interviewEvaluation，其他模式完全不提這個欄位，
+    // 避免非面試模式的請求裡出現用不到的欄位說明，讓 prompt 更乾淨。
+    if (isInterview) {
+      baseProperties.interviewEvaluation = {
+        type: Type.OBJECT,
+        description: "面試評分維度，僅面試模式需要",
+        properties: isTechnicalInterview
+          ? {
+              technicalDepth: { type: Type.NUMBER, description: "技術深度，0-100" },
+              starStructure: { type: Type.NUMBER, description: "STAR 結構完整度，0-100" },
+              communication: { type: Type.NUMBER, description: "溝通表達，0-100" },
+              engineeringThinking: { type: Type.NUMBER, description: "工程思維，0-100" },
+            }
+          : {
+              starStructure: { type: Type.NUMBER, description: "STAR 結構完整度，0-100" },
+              communication: { type: Type.NUMBER, description: "溝通表達，0-100" },
+            },
+        required: isTechnicalInterview
+          ? ["technicalDepth", "starStructure", "communication", "engineeringThinking"]
+          : ["starStructure", "communication"],
+      };
+    }
+
     const response = await this.client.models.generateContent({
       model: MODEL_ID,
       contents: [
@@ -77,33 +133,7 @@ export class GeminiProvider implements AIProvider {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
-          properties: {
-            transcript: {
-              type: Type.STRING,
-              description: "使用者語音的逐字稿",
-            },
-            pronunciationScore: {
-              type: Type.NUMBER,
-              description: "發音評分，0-100",
-            },
-            grammarFeedback: {
-              type: Type.ARRAY,
-              description: "文法／用字修正建議，若無錯誤則為空陣列",
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  original: { type: Type.STRING },
-                  suggestion: { type: Type.STRING },
-                  reason: { type: Type.STRING },
-                },
-                required: ["original", "suggestion", "reason"],
-              },
-            },
-            aiReplyText: {
-              type: Type.STRING,
-              description: "教練口吻的回應或延續對話的下一句",
-            },
-          },
+          properties: baseProperties,
           required: ["transcript", "aiReplyText"],
         },
       },

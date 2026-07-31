@@ -12,7 +12,9 @@ supabase/
 │   ├── 20260730120040_session_turns.sql
 │   ├── 20260730120050_usage_logs.sql
 │   ├── 20260730120060_storage.sql
-│   └── 20260731090000_add_interview_mode.sql
+│   ├── 20260731090000_add_interview_mode.sql
+│   ├── 20260731150000_upgrade_gemini_model.sql
+│   └── 20260731170000_interview_evaluations.sql
 ├── schema.sql            # 上面所有 migration 合併成單一檔案，方便手動貼到 SQL Editor
 └── seed.sql              # 範例種子資料（3 個情境任務），供之後開發 scenario 模式測試用
 ```

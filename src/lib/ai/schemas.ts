@@ -12,9 +12,18 @@ export const grammarFeedbackItemSchema = z.object({
   reason: z.string(),
 });
 
+/** 對應 InterviewEvaluation，只有 interview 模式會用到 */
+export const interviewEvaluationSchema = z.object({
+  technicalDepth: z.number().min(0).max(100).optional(),
+  starStructure: z.number().min(0).max(100),
+  communication: z.number().min(0).max(100),
+  engineeringThinking: z.number().min(0).max(100).optional(),
+});
+
 export const speechProcessResultSchema = z.object({
   transcript: z.string(),
   pronunciationScore: z.number().min(0).max(100).optional(),
   grammarFeedback: z.array(grammarFeedbackItemSchema).optional(),
   aiReplyText: z.string(),
+  interviewEvaluation: interviewEvaluationSchema.optional(),
 });

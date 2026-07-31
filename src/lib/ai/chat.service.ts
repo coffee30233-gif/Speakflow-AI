@@ -29,7 +29,7 @@ export class ChatService {
   /**
    * 處理一輪語音互動，並把結果寫進資料庫。
    *
-   * @param providerId 使用者當前選擇的模型，例如 "gemini-2.5-flash" 或 "gpt-5.5"
+   * @param providerId 使用者當前選擇的模型，例如 "gemini-3-flash-preview" 或 "gpt-5.5"
    * @param supabase 這次請求「綁定使用者 session」的 Supabase client（來自 lib/supabase/server.ts），
    *   用這個 client 寫 session_turns，才能讓 RLS 的 insert policy 正常生效。
    *   不能傳 admin client 進來，那樣就繞過 RLS 了，等於自己放棄了資料庫層的保護。
@@ -63,6 +63,21 @@ export class ChatService {
       // 存檔失敗頂多是「這輪沒有歷史紀錄」，不應該讓使用者連結果都看不到。
       // 這裡選擇記錄錯誤但繼續回傳結果，而不是 throw。
       console.error("[ChatService] failed to write session_turns:", turnError);
+    }
+
+    // 寫入 interview_evaluations：面試模式專屬的評分維度，衛星表模式，
+    // 用使用者自己的 session client（RLS 一樣透過 session_turns → learning_sessions 判斷擁有權）。
+    if (result.interviewEvaluation && turnRow?.id) {
+      const { error: evalError } = await supabase.from("interview_evaluations").insert({
+        session_turn_id: turnRow.id,
+        technical_depth: result.interviewEvaluation.technicalDepth ?? null,
+        star_structure: result.interviewEvaluation.starStructure,
+        communication: result.interviewEvaluation.communication,
+        engineering_thinking: result.interviewEvaluation.engineeringThinking ?? null,
+      });
+      if (evalError) {
+        console.error("[ChatService] failed to write interview_evaluations:", evalError);
+      }
     }
 
     // 寫入 usage_logs：這張表刻意不開放一般使用者 insert（避免竄改用量），

@@ -13,7 +13,7 @@ export type ShadowingPhase = "ready" | "recording" | "processing" | "feedback" |
  * TODO：接上 profiles.preferred_ai_model 後，這裡要改成讀使用者的設定值，
  * 讓雙模型切換真正生效。
  */
-const DEFAULT_PROVIDER_ID = "gemini-2.5-flash";
+const DEFAULT_PROVIDER_ID = "gemini-3-flash-preview";
 
 interface UseShadowingPracticeResult {
   phase: ShadowingPhase;

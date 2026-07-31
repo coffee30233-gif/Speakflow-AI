@@ -49,12 +49,27 @@ export interface SpeechProcessInput {
   interviewContext?: import("@/lib/interview/types").InterviewContext;
 }
 
+/**
+ * 面試模式專屬的評分維度（對應 V1 產品願景：技術深度／STAR結構／溝通表達／工程思維）。
+ * 只有 mode === "interview" 時才會有值。
+ * technicalDepth / engineeringThinking 只在技術相關的面試模式才會出現
+ * （由 lib/interview/prompt-builder.ts 決定要不要要求 AI 填寫這兩項）。
+ */
+export interface InterviewEvaluation {
+  technicalDepth?: number;
+  starStructure: number;
+  communication: number;
+  engineeringThinking?: number;
+}
+
 /** processSpeech 的統一回傳格式，不論底層是哪個供應商，回傳結構都相同 */
 export interface SpeechProcessResult {
   transcript: string;
   pronunciationScore?: number;
   grammarFeedback?: GrammarFeedbackItem[];
   aiReplyText: string;
+  /** 僅 interview 模式會填寫 */
+  interviewEvaluation?: InterviewEvaluation;
 }
 
 /**
@@ -62,9 +77,9 @@ export interface SpeechProcessResult {
  * 這是整個 Provider Pattern 的核心契約。
  */
 export interface AIProvider {
-  /** 供應商識別碼，例如 "gemini-2.5-flash"，會被存進 usage_logs / session_turns */
+  /** 供應商識別碼，例如 "gemini-3-flash-preview"，會被存進 usage_logs / session_turns */
   readonly id: string;
-  /** 顯示於 UI 的名稱，例如 "Gemini 2.5 Flash（免費⚡）" */
+  /** 顯示於 UI 的名稱，例如 "Gemini 3 Flash（免費⚡）" */
   readonly displayName: string;
 
   /**

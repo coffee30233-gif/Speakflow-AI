@@ -37,6 +37,15 @@ function pickRelevantSectionHeadings(interviewMode: string): string[] {
   return [...common, "Behavioral Interview Topics", "STAR Method", "Technical Knowledge"];
 }
 
+/**
+ * 判斷這個面試模式是否需要技術類評分維度（technicalDepth／engineeringThinking）。
+ * 沿用跟 pickRelevantSectionHeadings 一樣的判斷邏輯（純粹看模式名稱關鍵字），
+ * 保持「不寫死公司內容」的原則——這裡判斷的是模式名稱的通用慣例，不是哪間公司。
+ */
+export function requiresTechnicalEvaluation(interviewMode: string): boolean {
+  return interviewMode.toLowerCase().includes("technical");
+}
+
 const DIFFICULTY_INSTRUCTION: Record<DifficultyLevel, string> = {
   easy: "提出的問題應該較為基礎，給予候選人更多引導與鼓勵，追問不要太尖銳。",
   medium: "提出中等難度的問題，可以適度追問細節，維持專業但不失友善的語氣。",
@@ -77,6 +86,18 @@ export function buildInterviewPrompt(context: InterviewContext, contextTurns: Ch
           .join("\n")}`
       : "\n\n（這是這場模擬面試的第一個問題）";
 
+  const isTechnical = requiresTechnicalEvaluation(context.interviewMode);
+  const evaluationInstruction = isTechnical
+    ? `5. interviewEvaluation：
+   - technicalDepth：技術深度評分（0-100），是否展現足夠的專業知識與細節
+   - starStructure：STAR 結構評分（0-100），回答是否有 Situation/Task/Action/Result 的清楚脈絡
+   - communication：溝通表達評分（0-100），表達是否清楚、有邏輯
+   - engineeringThinking：工程思維評分（0-100），是否展現系統性的問題分析與解決思路`
+    : `5. interviewEvaluation：
+   - starStructure：STAR 結構評分（0-100），回答是否有 Situation/Task/Action/Result 的清楚脈絡
+   - communication：溝通表達評分（0-100），表達是否清楚、有邏輯
+   （這個模式不需要 technicalDepth 與 engineeringThinking，請省略這兩個欄位）`;
+
   return `你正在為使用者模擬一場「${meta.displayName}」的「${context.interviewMode}」，應徵職位是「${context.position}」。
 
 請你全程扮演這間公司的面試官，語氣與提問方向需符合以下公司文化、技術背景與評分標準：
@@ -89,5 +110,6 @@ ${knowledgeBlock}
 1. transcript：使用者回答的逐字稿
 2. pronunciationScore：發音評分（0-100）
 3. grammarFeedback：文法／用字修正建議（陣列，若無錯誤則為空陣列）
-4. aiReplyText：以面試官的身份給的簡短回饋，並自然地提出下一個面試問題或追問細節（不要說明你在打分數，維持面試情境的沉浸感）`;
+4. aiReplyText：以面試官的身份給的簡短回饋，並自然地提出下一個面試問題或追問細節（不要說明你在打分數，維持面試情境的沉浸感）
+${evaluationInstruction}`;
 }

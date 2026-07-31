@@ -15,7 +15,7 @@ import { OpenAIProvider } from "@/lib/ai/providers/openai.provider";
  * 導致還沒用到某個 Provider 時就因為缺少該 Provider 的 Key 而整個 module 載入失敗。
  */
 const providerRegistry: Record<string, () => AIProvider> = {
-  "gemini-2.5-flash": () => new GeminiProvider(),
+  "gemini-3-flash-preview": () => new GeminiProvider(),
   "gpt-5.5": () => new OpenAIProvider(),
 };
 

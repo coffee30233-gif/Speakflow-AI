@@ -374,3 +374,91 @@ alter table public.learning_sessions
 alter table public.learning_sessions
   add constraint learning_sessions_mode_check
   check (mode in ('shadowing', 'freetalk', 'scenario', 'interview'));
+
+-- ============================================================================
+-- 追加 migration：20260731150000_upgrade_gemini_model.sql
+-- ============================================================================
+-- ============================================================================
+-- 0008: 升級 Gemini 型號到 gemini-3-flash-preview
+-- ============================================================================
+-- 應用程式端已經把 GeminiProvider 從 gemini-2.5-flash 升級成 gemini-3-flash-preview。
+-- 這裡更新兩個 check constraint 加入新型號。
+--
+-- 刻意保留 'gemini-2.5-flash' 仍在允許清單裡（沒有整個換掉）：
+-- 如果資料庫裡已經有用舊型號建立的歷史紀錄（learning_sessions.ai_model_used），
+-- 拿掉舊值會讓那些既有資料列變成不合法狀態。新的 session 建立邏輯
+-- （provider.factory.ts）已經不會再選到舊型號了，這裡單純是保留歷史相容性。
+
+alter table public.profiles
+  drop constraint if exists profiles_preferred_ai_model_check;
+
+alter table public.profiles
+  add constraint profiles_preferred_ai_model_check
+  check (preferred_ai_model in ('gemini-2.5-flash', 'gemini-3-flash-preview', 'gpt-5.5'));
+
+alter table public.profiles
+  alter column preferred_ai_model set default 'gemini-3-flash-preview';
+
+alter table public.learning_sessions
+  drop constraint if exists learning_sessions_ai_model_used_check;
+
+alter table public.learning_sessions
+  add constraint learning_sessions_ai_model_used_check
+  check (ai_model_used in ('gemini-2.5-flash', 'gemini-3-flash-preview', 'gpt-5.5'));
+
+-- ============================================================================
+-- 追加 migration：20260731170000_interview_evaluations.sql
+-- ============================================================================
+-- ============================================================================
+-- 0009: interview_evaluations
+-- ============================================================================
+-- 面試模式專屬的評分維度（技術深度／STAR結構／溝通表達／工程思維），
+-- 對應 V1 產品願景文件的評分要求。
+--
+-- 設計原則：不擴充 session_turns 本身（那張表要保持所有模式共用的通用格式），
+-- 而是用衛星表 + 一對一關聯，模式專屬的欄位不會污染其他模式的資料列。
+-- 之後 Mind Map Recall 模式的 recall_attempts 也會採用一樣的模式。
+
+create table if not exists public.interview_evaluations (
+  session_turn_id uuid primary key references public.session_turns (id) on delete cascade,
+  technical_depth numeric check (technical_depth >= 0 and technical_depth <= 100),
+  star_structure numeric not null check (star_structure >= 0 and star_structure <= 100),
+  communication numeric not null check (communication >= 0 and communication <= 100),
+  engineering_thinking numeric check (engineering_thinking >= 0 and engineering_thinking <= 100),
+  created_at timestamptz not null default now()
+);
+
+comment on table public.interview_evaluations is
+  '面試模式的評分維度擴充，透過 session_turn_id 跟 session_turns 一對一關聯';
+
+-- ---------------------------------------------------------------------------
+-- RLS
+-- ---------------------------------------------------------------------------
+-- 擁有權透過 session_turns → learning_sessions 的關聯鏈判斷，
+-- 寫法跟 session_turns 自己的 RLS policy 是同一套模式。
+
+alter table public.interview_evaluations enable row level security;
+
+create policy "interview_evaluations_select_own"
+  on public.interview_evaluations for select
+  using (
+    exists (
+      select 1
+      from public.session_turns st
+      join public.learning_sessions ls on ls.id = st.session_id
+      where st.id = interview_evaluations.session_turn_id
+        and ls.user_id = auth.uid()
+    )
+  );
+
+create policy "interview_evaluations_insert_own"
+  on public.interview_evaluations for insert
+  with check (
+    exists (
+      select 1
+      from public.session_turns st
+      join public.learning_sessions ls on ls.id = st.session_id
+      where st.id = interview_evaluations.session_turn_id
+        and ls.user_id = auth.uid()
+    )
+  );

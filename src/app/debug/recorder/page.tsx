@@ -34,7 +34,7 @@ export default function RecorderDebugPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          providerId: "gemini-2.5-flash",
+          providerId: "gemini-3-flash-preview",
           mode: "shadowing",
           audioBase64,
           audioFormat: recordedMimeType,

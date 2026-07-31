@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useInterviewPractice } from "@/hooks/useInterviewPractice";
 import { PronunciationScoreRing } from "@/components/practice/PronunciationScoreRing";
 import { GrammarFeedbackList } from "@/components/practice/GrammarFeedbackList";
+import { InterviewEvaluationBars } from "@/components/practice/InterviewEvaluationBars";
 import type { DifficultyLevel } from "@/lib/interview/types";
 
 interface InterviewSessionClientProps {
@@ -139,6 +140,10 @@ export function InterviewSessionClient({
             <div className="flex justify-center">
               <PronunciationScoreRing score={feedback.pronunciationScore ?? 0} />
             </div>
+
+            {feedback.interviewEvaluation && (
+              <InterviewEvaluationBars evaluation={feedback.interviewEvaluation} />
+            )}
 
             <div className="bg-card border-border rounded-lg border p-3 text-sm">
               <p className="text-muted-foreground mb-1 text-xs">你的回答</p>

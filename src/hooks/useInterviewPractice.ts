@@ -15,7 +15,7 @@ export type InterviewPhase =
   | "finished";
 
 /** 同樣先固定用 Gemini，等 Auth／使用者設定接上後再改成可切換 */
-const DEFAULT_PROVIDER_ID = "gemini-2.5-flash";
+const DEFAULT_PROVIDER_ID = "gemini-3-flash-preview";
 
 interface InterviewBaseContext {
   companyId: string;

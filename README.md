@@ -48,6 +48,27 @@ AIProvider 介面  src/lib/ai/types.ts
 - [x] 前端錄音功能 `useAudioRecorder`（iOS Safari 格式偵測）+ `/debug/recorder` 實測頁
 - [ ] `GeminiProvider.textToSpeech`（TODO，下一步驟）
 - [ ] `OpenAIProvider` 的實際 API 串接（目前為 TODO stub）
+- [x] **Gemini 型號升級**：`gemini-2.5-flash` → `gemini-3-flash-preview`（目前 Google 官方標準款，
+  音訊輸入＋結構化輸出功能更完整）。改動範圍：`GeminiProvider`、`provider.factory.ts`、
+  兩個 hook 的 `DEFAULT_PROVIDER_ID`、新 migration `20260731150000_upgrade_gemini_model.sql`
+  （放寬 `preferred_ai_model` / `ai_model_used` 的 check constraint，**刻意保留舊型號字串
+  仍在允許清單內**，避免既有歷史資料列因為型號改名而變成不合法狀態）
+  ⚠️ **注意**：`gemini-3-flash-preview` 是 preview 型號，Google 可能不預警就調整行為或棄用，
+  之後上線前建議再次確認是否有正式版（non-preview）型號可以換過去。
+- [x] **Phase A：面試評分維度擴充**（V1 願景文件要求）：
+  - `SpeechProcessResult` 新增 `interviewEvaluation`（technicalDepth／starStructure／communication／engineeringThinking）
+  - `GeminiProvider` 動態組 responseSchema：只有 `mode === "interview"` 才要求這個欄位，
+    技術類面試模式（模式名稱含 "technical"）才會多要求 technicalDepth／engineeringThinking，
+    避免非面試模式或非技術面試模式的請求裡出現用不到的欄位說明
+  - 新資料表 `interview_evaluations`（衛星表模式，透過 `session_turn_id` 跟 `session_turns` 一對一關聯，
+    不污染其他模式共用的 `session_turns` 欄位——這個模式之後 Mind Map Recall 的 `recall_attempts` 也會沿用）
+  - 面試結果畫面新增 `InterviewEvaluationBars` 視覺化元件（四個維度的分數條）
+  - **`OpenAIProvider` 沒有跟著改**：它目前還是 TODO stub，之後真的實作時要記得補上一樣的邏輯
+- [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
+  （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
+  行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。
+  屆時的設定：預設模型改為 Groq、文字模型用 `openai/gpt-oss-120b`
+  （Groq 目前的官方推薦預設，需要屆時重新確認是否仍是最新推薦）。
 - [x] Supabase Client 設定（browser / server / middleware / admin，四種 client 都已建立）
 - [x] Supabase Database Schema、RLS Policy、Storage Bucket（見 `supabase/README.md`）
 - [ ] 實際在 Supabase 專案執行 migration（需要你有 Supabase 專案並填好 `.env.local`）
