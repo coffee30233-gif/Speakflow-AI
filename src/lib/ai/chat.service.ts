@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAIProvider } from "@/lib/ai/provider.factory";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { SpeechProcessInput, SpeechProcessResult } from "@/lib/ai/types";
+import type { SpeechProcessInput, SpeechProcessResult, StoryDecomposition } from "@/lib/ai/types";
 
 /**
  * ChatService — UI／API Route 唯一應該呼叫的入口。
@@ -105,6 +105,41 @@ export class ChatService {
   async textToSpeech(providerId: string, text: string): Promise<string> {
     const provider = getAIProvider(providerId);
     return provider.textToSpeech(text);
+  }
+
+  /**
+   * 把中文故事拆解成 STAR + 關鍵字 + 英文最佳答案。
+   * 這裡不寫 session_turns（那張表是給「一輪語音互動」用的，Story 拆解不是語音互動），
+   * 但一樣要記 usage_logs，因為這也是一次真金白銀的 AI API 呼叫，成本追蹤不能有漏網之魚。
+   */
+  async decomposeStory(
+    providerId: string,
+    storyTextZh: string,
+    userId: string,
+  ): Promise<StoryDecomposition> {
+    const provider = getAIProvider(providerId);
+    const result = await provider.decomposeStory(storyTextZh);
+
+    try {
+      const admin = createAdminClient();
+      // 注意：這裡的 model 欄位記的是 provider.id（使用者選擇的「對話用」模型層級），
+      // 不是 decomposeStory 內部實際用的型號（GeminiProvider 內部固定用 Pro 層級）。
+      // 這是已知的不精確之處，如果之後要精算「Pro 呼叫」的實際成本，
+      // 需要讓 Provider 的方法回傳實際用的 model 字串，這裡先不做這個工程。
+      const { error: usageError } = await admin.from("usage_logs").insert({
+        user_id: userId,
+        session_turn_id: null,
+        provider: provider.id.startsWith("gemini") ? "gemini" : "openai",
+        model: provider.id,
+      });
+      if (usageError) {
+        console.error("[ChatService] failed to write usage_logs (decomposeStory):", usageError);
+      }
+    } catch (err) {
+      console.error("[ChatService] admin client unavailable, skipping usage_logs:", err);
+    }
+
+    return result;
   }
 }
 

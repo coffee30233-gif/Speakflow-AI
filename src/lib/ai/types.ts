@@ -73,6 +73,23 @@ export interface SpeechProcessResult {
 }
 
 /**
+ * Story 拆解結果（Mind Map B-1：使用者寫下中文故事，AI 拆成 STAR + 關鍵字 + 英文最佳答案）。
+ * 這是純文字輸入輸出，不涉及語音，跟 processSpeech 是完全不同的能力，
+ * 但一樣要能在 Gemini/OpenAI 之間切換，所以放進同一個 AIProvider 介面。
+ */
+export interface StoryDecomposition {
+  /** 故事核心內容的英文重寫版本 */
+  contentEn: string;
+  starSituation: string;
+  starTask: string;
+  starAction: string;
+  starResult: string;
+  keywords: string[];
+  /** 適合口說、約 60-90 秒份量的英文最佳答案草稿 */
+  bestAnswerEn: string;
+}
+
+/**
  * 所有 AI 供應商都必須實作這個介面。
  * 這是整個 Provider Pattern 的核心契約。
  */
@@ -93,4 +110,12 @@ export interface AIProvider {
    * 文字轉語音，回傳可播放的音檔 URL（或 base64 audio data URI）。
    */
   textToSpeech(text: string): Promise<string>;
+
+  /**
+   * 把使用者寫的中文故事拆解成 STAR 結構＋關鍵字＋英文最佳答案。
+   * 這是純文字推理任務，供應商內部可能會選用跟 processSpeech 不同的底層模型
+   * （例如 Gemini 這邊會用 Pro 層級的模型，而不是 processSpeech 用的 Flash），
+   * 但對呼叫端來說完全透明，一樣只是呼叫這個方法。
+   */
+  decomposeStory(storyTextZh: string): Promise<StoryDecomposition>;
 }

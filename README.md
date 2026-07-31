@@ -64,6 +64,18 @@ AIProvider 介面  src/lib/ai/types.ts
     不污染其他模式共用的 `session_turns` 欄位——這個模式之後 Mind Map Recall 的 `recall_attempts` 也會沿用）
   - 面試結果畫面新增 `InterviewEvaluationBars` 視覺化元件（四個維度的分數條）
   - **`OpenAIProvider` 沒有跟著改**：它目前還是 TODO stub，之後真的實作時要記得補上一樣的邏輯
+- [x] **V1 Phase B-1：Story 建立與 AI 拆解**：
+  - `AIProvider` 介面新增 `decomposeStory()`，`GeminiProvider` 內部改用 `gemini-3.1-pro-preview`
+    （原規格文件寫 `gemini-2.5-pro`，查證後已被 Google 棄用，換成現行替代型號）
+  - 新資料表 `stories`（中文原文 + AI 拆解出的 STAR / 關鍵字 / 英文最佳答案）
+  - `POST /api/stories`：建立故事並同步呼叫 AI 拆解，一次寫入
+  - `/practice/mindmap`：故事庫列表頁；`/practice/mindmap/stories/new`：建立故事表單
+  - 首頁導覽更新：拿掉跟讀模式的曝光（保留程式碼），加入 Mind Map Recall 入口，
+    對應 V1 願景「只有兩個模式」的定位（這個異動我沒有另外找你確認，如果不同意請告訴我）
+  - **已知不精確之處**：`usage_logs` 記的 `model` 欄位是「使用者選的對話層級」，
+    不是 `decomposeStory` 內部實際用的 Pro 型號，之後要精算 Pro 呼叫成本需要另外處理
+  - **還沒做**：Question／Mind Map 資料表（B-2）、React Flow 畫布（B-3）、
+    Story 列表頁的編輯/刪除功能
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

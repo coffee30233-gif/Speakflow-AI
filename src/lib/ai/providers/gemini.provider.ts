@@ -4,9 +4,10 @@ import type {
   AIProvider,
   SpeechProcessInput,
   SpeechProcessResult,
+  StoryDecomposition,
 } from "@/lib/ai/types";
 import { buildSpeechPrompt } from "@/lib/ai/prompt-builder";
-import { speechProcessResultSchema } from "@/lib/ai/schemas";
+import { speechProcessResultSchema, storyDecompositionSchema } from "@/lib/ai/schemas";
 import { requiresTechnicalEvaluation } from "@/lib/interview/prompt-builder";
 
 /**
@@ -22,6 +23,16 @@ import { requiresTechnicalEvaluation } from "@/lib/interview/prompt-builder";
  */
 
 const MODEL_ID = "gemini-3-flash-preview";
+
+/**
+ * 較重的推理任務（Story 拆解、之後的面試/Mind Map 評分）改用 Pro 層級模型，
+ * 品質比 Flash 好，代價是速度較慢、成本較高——這種任務通常是一次性、
+ * 使用者能接受多等一點時間，跟即時互動的跟讀評分不一樣。
+ *
+ * 注意：原本規格文件寫的是 gemini-2.5-pro，查證後那個型號已經被 Google 棄用
+ * （新專案呼叫會直接 404），這裡換成目前的替代型號 gemini-3.1-pro-preview。
+ */
+const PRO_MODEL_ID = "gemini-3.1-pro-preview";
 
 /**
  * Gemini 官方文件列出的支援音訊格式：wav / mp3 / aiff / aac / ogg / flac。
@@ -166,9 +177,85 @@ export class GeminiProvider implements AIProvider {
 
   async textToSpeech(text: string): Promise<string> {
     // TODO: 下一個開發步驟再實作。Gemini TTS 走的是另一個 model
-    // （例如 gemini-2.5-flash-preview-tts），回傳 PCM 音訊，
+    // （gemini-3.1-flash-tts-preview），回傳 PCM 音訊，
     // 需要另外處理成瀏覽器可播放的格式（如轉 WAV data URI），先保留介面。
     void text;
     throw new Error("GeminiProvider.textToSpeech: not yet implemented");
+  }
+
+  async decomposeStory(storyTextZh: string): Promise<StoryDecomposition> {
+    const prompt = `你是一位英文面試教練，同時精通中文。使用者會用中文寫下一段自己的個人經歷或故事，
+這段故事之後會被用來準備英文求職面試的口說回答。請你：
+
+1. contentEn：用英文簡潔重寫這個故事的核心內容
+2. 拆解成 STAR 架構，每一項都用英文簡短描述：
+   - starSituation：情境（當時的背景/處境）
+   - starTask：任務（面臨的目標或挑戰）
+   - starAction：行動（實際採取了什麼行動）
+   - starResult：結果（產生了什麼結果或學到什麼）
+3. keywords：抽取 3-6 個英文關鍵字，目的是讓使用者之後只看到這幾個關鍵字，
+   就能想起整個故事的脈絡（用於 Mind Map 的回憶提示，不是隨便摘要用字）
+4. bestAnswerEn：根據這個故事，草擬一個適合在面試中口說的英文最佳答案，
+   長度約 60-90 秒的口說份量（約 150-200 字），符合 STAR 結構
+
+使用者的故事（中文）：
+「${storyTextZh}」
+
+請回傳結構化 JSON，所有欄位都用英文（keywords 陣列裡的每個字也是英文）。`;
+
+    const response = await this.client.models.generateContent({
+      model: PRO_MODEL_ID,
+      contents: [{ text: prompt }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            contentEn: { type: Type.STRING },
+            starSituation: { type: Type.STRING },
+            starTask: { type: Type.STRING },
+            starAction: { type: Type.STRING },
+            starResult: { type: Type.STRING },
+            keywords: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            bestAnswerEn: { type: Type.STRING },
+          },
+          required: [
+            "contentEn",
+            "starSituation",
+            "starTask",
+            "starAction",
+            "starResult",
+            "keywords",
+            "bestAnswerEn",
+          ],
+        },
+      },
+    });
+
+    const rawText = response.text;
+    if (!rawText) {
+      throw new Error("GeminiProvider.decomposeStory: model returned an empty response");
+    }
+
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(rawText);
+    } catch {
+      throw new Error(
+        `GeminiProvider.decomposeStory: model returned invalid JSON: ${rawText.slice(0, 200)}`,
+      );
+    }
+
+    const result = storyDecompositionSchema.safeParse(parsedJson);
+    if (!result.success) {
+      throw new Error(
+        `GeminiProvider.decomposeStory: response failed schema validation: ${result.error.message}`,
+      );
+    }
+
+    return result.data;
   }
 }

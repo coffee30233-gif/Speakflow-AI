@@ -20,16 +20,16 @@ export default async function HomePage() {
 
       <div className="flex flex-col gap-3">
         <Link
-          href="/practice/shadowing"
+          href="/practice/interview"
           className="bg-primary text-primary-foreground rounded-full px-8 py-3.5 text-center text-sm font-medium shadow-lg active:scale-95"
         >
-          開始跟讀練習
+          模擬面試教練
         </Link>
         <Link
-          href="/practice/interview"
+          href="/practice/mindmap"
           className="border-border text-foreground rounded-full border px-8 py-3.5 text-center text-sm font-medium active:scale-95"
         >
-          模擬面試教練
+          Mind Map Recall
         </Link>
       </div>
 

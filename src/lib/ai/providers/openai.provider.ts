@@ -3,6 +3,7 @@ import type {
   AIProvider,
   SpeechProcessInput,
   SpeechProcessResult,
+  StoryDecomposition,
 } from "@/lib/ai/types";
 import { buildSpeechPrompt } from "@/lib/ai/prompt-builder";
 
@@ -40,5 +41,11 @@ export class OpenAIProvider implements AIProvider {
     // TODO: 實作 OpenAI TTS 呼叫，回傳音檔 URL 或 base64 data URI
     void text;
     throw new Error("OpenAIProvider.textToSpeech: not yet implemented");
+  }
+
+  async decomposeStory(storyTextZh: string): Promise<StoryDecomposition> {
+    // TODO: 實作實際 OpenAI API 呼叫（文字推理 + structured output / JSON mode）
+    void storyTextZh;
+    throw new Error("OpenAIProvider.decomposeStory: not yet implemented");
   }
 }

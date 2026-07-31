@@ -27,3 +27,14 @@ export const speechProcessResultSchema = z.object({
   aiReplyText: z.string(),
   interviewEvaluation: interviewEvaluationSchema.optional(),
 });
+
+/** 對應 StoryDecomposition */
+export const storyDecompositionSchema = z.object({
+  contentEn: z.string(),
+  starSituation: z.string(),
+  starTask: z.string(),
+  starAction: z.string(),
+  starResult: z.string(),
+  keywords: z.array(z.string()).min(1),
+  bestAnswerEn: z.string(),
+});
