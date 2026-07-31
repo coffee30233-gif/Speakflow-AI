@@ -1,6 +1,7 @@
 import "server-only";
 import type { SpeechProcessInput } from "@/lib/ai/types";
 import { buildInterviewPrompt } from "@/lib/interview/prompt-builder";
+import { buildRecallPrompt } from "@/lib/mindmap/prompt-builder";
 
 /**
  * 依練習模式組出對應的 system instruction。
@@ -35,6 +36,13 @@ export function buildSpeechPrompt(input: SpeechProcessInput): string {
       // 這裡只負責「轉發」，不重複組裝邏輯——這是刻意的模組邊界劃分：
       // lib/ai 只管「怎麼跟 AI 溝通」，lib/interview 只管「面試教練這個功能怎麼運作」。
       return buildInterviewPrompt(input.interviewContext, input.contextTurns);
+    }
+    case "recall": {
+      if (!input.recallContext) {
+        throw new Error("recall 模式必須提供 recallContext");
+      }
+      // 跟 interview 模式一樣的模組邊界劃分：邏輯在 lib/mindmap 維護，這裡只轉發。
+      return buildRecallPrompt(input.recallContext);
     }
     default:
       return base;

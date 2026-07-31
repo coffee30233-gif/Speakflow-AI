@@ -80,6 +80,24 @@ export class ChatService {
       }
     }
 
+    // 寫入 recall_attempts：Recall Training 專屬的評分維度，衛星表模式，
+    // mind_map_id / level / hintLevelUsed / recallTimeSeconds 都來自 input.recallContext，
+    // completeness / confidence 來自 AI 的回覆，兩邊湊起來才是完整的一筆紀錄。
+    if (result.recallEvaluation && input.recallContext && turnRow?.id) {
+      const { error: recallError } = await supabase.from("recall_attempts").insert({
+        session_turn_id: turnRow.id,
+        mind_map_id: input.recallContext.mindMapId,
+        level: input.recallContext.level,
+        recall_time_seconds: input.recallContext.recallTimeSeconds,
+        completeness_score: result.recallEvaluation.completeness,
+        confidence_score: result.recallEvaluation.confidence,
+        hint_level_used: input.recallContext.hintLevelUsed,
+      });
+      if (recallError) {
+        console.error("[ChatService] failed to write recall_attempts:", recallError);
+      }
+    }
+
     // 寫入 usage_logs：這張表刻意不開放一般使用者 insert（避免竄改用量），
     // 所以這裡固定用 admin client（service role），不是傳進來的使用者 client。
     try {

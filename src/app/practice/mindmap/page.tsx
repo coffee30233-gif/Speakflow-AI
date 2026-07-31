@@ -9,6 +9,12 @@ interface StoryRow {
   created_at: string;
 }
 
+interface MindMapRow {
+  id: string;
+  question_id: string;
+  interview_questions: { question_text: string } | null;
+}
+
 export default async function MindMapHomePage() {
   const supabase = await createClient();
   const {
@@ -19,13 +25,22 @@ export default async function MindMapHomePage() {
     redirect("/login?next=/practice/mindmap");
   }
 
-  const { data: stories, error } = await supabase
+  const { data: stories, error: storiesError } = await supabase
     .from("stories")
     .select("id, title, keywords, created_at")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("[mindmap] failed to load stories:", error);
+  if (storiesError) {
+    console.error("[mindmap] failed to load stories:", storiesError);
+  }
+
+  const { data: mindMaps, error: mindMapsError } = await supabase
+    .from("mind_maps")
+    .select("id, question_id, interview_questions ( question_text )")
+    .order("created_at", { ascending: false });
+
+  if (mindMapsError) {
+    console.error("[mindmap] failed to load mind maps:", mindMapsError);
   }
 
   return (
@@ -76,9 +91,32 @@ export default async function MindMapHomePage() {
                 ))}
               </div>
             )}
+            <Link
+              href={`/practice/mindmap/stories/${story.id}/build`}
+              className="text-primary mt-2 inline-block text-xs font-medium"
+            >
+              生成 Mind Map →
+            </Link>
           </div>
         ))}
       </div>
+
+      {mindMaps && mindMaps.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold">我的 Mind Map</h2>
+          <div className="space-y-2">
+            {(mindMaps as unknown as MindMapRow[]).map((mm) => (
+              <Link
+                key={mm.id}
+                href={`/practice/mindmap/view/${mm.id}`}
+                className="bg-card border-border block rounded-lg border p-3 text-sm"
+              >
+                {mm.interview_questions?.question_text ?? "（問題）"}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

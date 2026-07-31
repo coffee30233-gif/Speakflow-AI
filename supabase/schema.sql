@@ -524,3 +524,180 @@ create policy "stories_update_own"
 create policy "stories_delete_own"
   on public.stories for delete
   using (auth.uid() = user_id);
+
+-- ============================================================================
+-- 追加 migration：20260731210000_interview_questions.sql
+-- ============================================================================
+-- ============================================================================
+-- 0011: interview_questions（Mind Map Recall B-2）
+-- ============================================================================
+-- 面試問題，兩種來源：
+--   - company_kb：來自公司知識庫的 Behavioral Interview Topics（user_id 為 null，
+--     所有登入使用者共用同一份，第一次被選用時才會 materialize 成一筆資料列，
+--     不是靠 migration 手動塞資料——避免內容跟 companies/*.md 重複維護、之後失去同步）
+--   - custom：使用者自己輸入的題目（user_id 為該使用者）
+
+create table if not exists public.interview_questions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles (id) on delete cascade,
+  company_id text,
+  question_text text not null,
+  source text not null check (source in ('company_kb', 'custom')),
+  created_at timestamptz not null default now(),
+
+  constraint interview_questions_source_shape check (
+    (source = 'company_kb' and user_id is null and company_id is not null)
+    or (source = 'custom' and user_id is not null)
+  )
+);
+
+comment on table public.interview_questions is
+  '面試問題庫，來自公司知識庫（共用）或使用者自訂（私有）';
+
+-- company_kb 題目：同一間公司底下題目文字不重複
+create unique index if not exists interview_questions_company_kb_unique
+  on public.interview_questions (company_id, question_text)
+  where source = 'company_kb';
+
+-- custom 題目：同一個使用者底下題目文字不重複
+create unique index if not exists interview_questions_custom_unique
+  on public.interview_questions (user_id, question_text)
+  where source = 'custom';
+
+-- ---------------------------------------------------------------------------
+-- RLS
+-- ---------------------------------------------------------------------------
+alter table public.interview_questions enable row level security;
+
+-- company_kb 題目所有登入使用者都能讀；custom 題目只有本人能讀
+create policy "interview_questions_select"
+  on public.interview_questions for select
+  to authenticated
+  using (source = 'company_kb' or auth.uid() = user_id);
+
+-- 寫入：company_kb 題目允許任何登入使用者 insert（因為是「第一次被選用時才 materialize」，
+-- 不是特定使用者專屬的資料，這裡沒有安全疑慮——內容本來就來自公開的公司知識庫檔案）；
+-- custom 題目只能新增屬於自己的
+create policy "interview_questions_insert"
+  on public.interview_questions for insert
+  to authenticated
+  with check (
+    (source = 'company_kb' and user_id is null)
+    or (source = 'custom' and auth.uid() = user_id)
+  );
+
+-- ============================================================================
+-- 追加 migration：20260731210100_mind_maps.sql
+-- ============================================================================
+-- ============================================================================
+-- 0012: mind_maps（Mind Map Recall B-2）
+-- ============================================================================
+-- 一個使用者、一個問題，一份 Mind Map（React Flow 節點/邊格式）。
+-- 從 story 的 STAR 拆解規則式產生，不是另外呼叫 AI 生成。
+
+create table if not exists public.mind_maps (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  question_id uuid not null references public.interview_questions (id) on delete cascade,
+  story_id uuid references public.stories (id) on delete set null,
+  react_flow_data jsonb not null,      -- { nodes: [...], edges: [...] }
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique (user_id, question_id)
+);
+
+comment on table public.mind_maps is
+  'React Flow 格式的心智圖資料，從 stories 的 STAR 拆解規則式產生';
+
+create index if not exists mind_maps_user_id_idx on public.mind_maps (user_id);
+
+drop trigger if exists set_mind_maps_updated_at on public.mind_maps;
+create trigger set_mind_maps_updated_at
+  before update on public.mind_maps
+  for each row
+  execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- RLS
+-- ---------------------------------------------------------------------------
+alter table public.mind_maps enable row level security;
+
+create policy "mind_maps_select_own"
+  on public.mind_maps for select
+  using (auth.uid() = user_id);
+
+create policy "mind_maps_insert_own"
+  on public.mind_maps for insert
+  with check (auth.uid() = user_id);
+
+create policy "mind_maps_update_own"
+  on public.mind_maps for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "mind_maps_delete_own"
+  on public.mind_maps for delete
+  using (auth.uid() = user_id);
+
+-- ============================================================================
+-- 追加 migration：20260731230000_recall_attempts.sql
+-- ============================================================================
+-- ============================================================================
+-- 0013: recall_attempts + learning_sessions.mode 加入 "recall"
+-- ============================================================================
+
+alter table public.learning_sessions
+  drop constraint if exists learning_sessions_mode_check;
+
+alter table public.learning_sessions
+  add constraint learning_sessions_mode_check
+  check (mode in ('shadowing', 'freetalk', 'scenario', 'interview', 'recall'));
+
+-- Recall Training 專屬的評分維度，衛星表模式，跟 interview_evaluations 同一套設計原則：
+-- session_turns 保持通用格式，模式專屬欄位另開表，一對一關聯。
+create table if not exists public.recall_attempts (
+  id uuid primary key default gen_random_uuid(),
+  session_turn_id uuid not null references public.session_turns (id) on delete cascade,
+  mind_map_id uuid not null references public.mind_maps (id) on delete cascade,
+  level integer not null check (level in (1, 2, 3)),
+  recall_time_seconds numeric check (recall_time_seconds >= 0),
+  completeness_score numeric check (completeness_score >= 0 and completeness_score <= 100),
+  confidence_score numeric check (confidence_score >= 0 and confidence_score <= 100),
+  hint_level_used integer not null default 0 check (hint_level_used between 0 and 3),
+  created_at timestamptz not null default now()
+);
+
+comment on table public.recall_attempts is
+  'Mind Map Recall Training 的練習紀錄，透過 session_turn_id 跟 session_turns 一對一關聯';
+
+create index if not exists recall_attempts_mind_map_id_idx on public.recall_attempts (mind_map_id);
+
+-- ---------------------------------------------------------------------------
+-- RLS
+-- ---------------------------------------------------------------------------
+alter table public.recall_attempts enable row level security;
+
+create policy "recall_attempts_select_own"
+  on public.recall_attempts for select
+  using (
+    exists (
+      select 1
+      from public.session_turns st
+      join public.learning_sessions ls on ls.id = st.session_id
+      where st.id = recall_attempts.session_turn_id
+        and ls.user_id = auth.uid()
+    )
+  );
+
+create policy "recall_attempts_insert_own"
+  on public.recall_attempts for insert
+  with check (
+    exists (
+      select 1
+      from public.session_turns st
+      join public.learning_sessions ls on ls.id = st.session_id
+      where st.id = recall_attempts.session_turn_id
+        and ls.user_id = auth.uid()
+    )
+  );

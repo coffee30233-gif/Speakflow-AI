@@ -23,10 +23,23 @@ const interviewContextSchema = z.object({
   currentQuestion: z.string().optional(),
 });
 
+const recallContextSchema = z.object({
+  mindMapId: z.string().uuid(),
+  questionText: z.string().min(1),
+  starSituation: z.string(),
+  starTask: z.string(),
+  starAction: z.string(),
+  starResult: z.string(),
+  keywords: z.array(z.string()),
+  level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  hintLevelUsed: z.number().int().min(0).max(3),
+  recallTimeSeconds: z.number().min(0),
+});
+
 const requestSchema = z
   .object({
     providerId: z.enum(AVAILABLE_PROVIDER_IDS as [string, ...string[]]),
-    mode: z.enum(["shadowing", "freetalk", "scenario", "interview"]),
+    mode: z.enum(["shadowing", "freetalk", "scenario", "interview", "recall"]),
     audioBase64: z.string().min(1),
     audioFormat: z.string().min(1),
     contextTurns: z
@@ -40,12 +53,17 @@ const requestSchema = z
     targetSentence: z.string().optional(),
     scenarioSystemPrompt: z.string().optional(),
     interviewContext: interviewContextSchema.optional(),
+    recallContext: recallContextSchema.optional(),
     sessionId: z.string().uuid(),
     turnIndex: z.number().int().min(0),
   })
   .refine((data) => data.mode !== "interview" || data.interviewContext !== undefined, {
     message: "interview 模式必須提供 interviewContext",
     path: ["interviewContext"],
+  })
+  .refine((data) => data.mode !== "recall" || data.recallContext !== undefined, {
+    message: "recall 模式必須提供 recallContext",
+    path: ["recallContext"],
   });
 
 export async function POST(req: NextRequest) {

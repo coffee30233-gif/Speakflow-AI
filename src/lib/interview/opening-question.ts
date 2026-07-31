@@ -21,3 +21,12 @@ export function getOpeningQuestion(companyId: string): string {
   // 知識庫沒有提供 Behavioral Interview Topics 段落時的保底開場白
   return "Tell me about yourself and why you're interested in this role.";
 }
+
+/**
+ * 列出該公司知識庫的全部 Behavioral Interview Topics，
+ * 供 Mind Map 選題畫面當作「company_kb 來源」的候選清單。
+ */
+export function listBehavioralQuestions(companyId: string): string[] {
+  const kb = loadCompanyKnowledgeBase(companyId);
+  return extractBulletList(getSectionText(kb, "Behavioral Interview Topics", false));
+}

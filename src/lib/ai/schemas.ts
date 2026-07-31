@@ -26,6 +26,12 @@ export const speechProcessResultSchema = z.object({
   grammarFeedback: z.array(grammarFeedbackItemSchema).optional(),
   aiReplyText: z.string(),
   interviewEvaluation: interviewEvaluationSchema.optional(),
+  recallEvaluation: z
+    .object({
+      completeness: z.number().min(0).max(100),
+      confidence: z.number().min(0).max(100),
+    })
+    .optional(),
 });
 
 /** 對應 StoryDecomposition */

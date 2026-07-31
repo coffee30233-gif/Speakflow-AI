@@ -18,7 +18,7 @@ export interface ChatTurn {
   text: string;
 }
 
-export type PracticeMode = "shadowing" | "freetalk" | "scenario" | "interview";
+export type PracticeMode = "shadowing" | "freetalk" | "scenario" | "interview" | "recall";
 
 export interface GrammarFeedbackItem {
   original: string;
@@ -47,6 +47,12 @@ export interface SpeechProcessInput {
    * 保持模組邊界清楚：interview 是「用」ai provider，不是 ai provider 的一部分。
    */
   interviewContext?: import("@/lib/interview/types").InterviewContext;
+  /**
+   * recall 模式下的完整上下文（問題/STAR/關鍵字/層級/提示使用狀況/回憶花費秒數）。
+   * 型別定義在 @/lib/mindmap/types，理由跟 interviewContext 一樣：
+   * 保持 lib/ai 不反過來依賴 lib/mindmap。
+   */
+  recallContext?: import("@/lib/mindmap/types").RecallContext;
 }
 
 /**
@@ -62,6 +68,18 @@ export interface InterviewEvaluation {
   engineeringThinking?: number;
 }
 
+/**
+ * Recall Training 專屬的評分維度。只有 mode === "recall" 時才會有值。
+ * 這裡刻意不評「文法對不對」（那是 grammarFeedback 的事），
+ * 而是評「回憶提取」本身的品質——這是 Mind Map Recall 功能的核心價值。
+ */
+export interface RecallEvaluation {
+  /** 這次回答涵蓋了故事關鍵內容（STAR + 關鍵字）的完整度，0-100 */
+  completeness: number;
+  /** 聽起來的自然度／流暢度，反映記憶提取的順暢程度，0-100 */
+  confidence: number;
+}
+
 /** processSpeech 的統一回傳格式，不論底層是哪個供應商，回傳結構都相同 */
 export interface SpeechProcessResult {
   transcript: string;
@@ -70,6 +88,8 @@ export interface SpeechProcessResult {
   aiReplyText: string;
   /** 僅 interview 模式會填寫 */
   interviewEvaluation?: InterviewEvaluation;
+  /** 僅 recall 模式會填寫 */
+  recallEvaluation?: RecallEvaluation;
 }
 
 /**

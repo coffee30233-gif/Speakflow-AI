@@ -129,8 +129,29 @@ export class GeminiProvider implements AIProvider {
       };
     }
 
+    // recall 模式才要求模型多回傳 recallEvaluation
+    if (input.mode === "recall") {
+      baseProperties.recallEvaluation = {
+        type: Type.OBJECT,
+        description: "回憶練習評分，僅 recall 模式需要",
+        properties: {
+          completeness: { type: Type.NUMBER, description: "回憶內容完整度，0-100" },
+          confidence: { type: Type.NUMBER, description: "自然度／流暢度，0-100" },
+        },
+        required: ["completeness", "confidence"],
+      };
+    }
+
+    // 較重的推理任務（面試評分、Recall 完整度比對）改用 Pro 層級模型，
+    // 跟讀等互動節奏快的模式維持 Flash，換取速度。
+    // 注意：這裡假設 gemini-3.1-pro-preview 跟 Flash 一樣支援 inlineData 原生音訊輸入，
+    // 目前查證資料沒有明確反例，但也沒有查到明確保證，第一次實際呼叫時要留意有沒有報錯，
+    // 如果不支援，這兩個模式的語音需要改走「先轉文字再推理」的兩段式管線。
+    const isReasoningHeavy = input.mode === "interview" || input.mode === "recall";
+    const modelForThisCall = isReasoningHeavy ? PRO_MODEL_ID : MODEL_ID;
+
     const response = await this.client.models.generateContent({
-      model: MODEL_ID,
+      model: modelForThisCall,
       contents: [
         { text: prompt },
         {

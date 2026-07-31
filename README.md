@@ -74,8 +74,42 @@ AIProvider 介面  src/lib/ai/types.ts
     對應 V1 願景「只有兩個模式」的定位（這個異動我沒有另外找你確認，如果不同意請告訴我）
   - **已知不精確之處**：`usage_logs` 記的 `model` 欄位是「使用者選的對話層級」，
     不是 `decomposeStory` 內部實際用的 Pro 型號，之後要精算 Pro 呼叫成本需要另外處理
-  - **還沒做**：Question／Mind Map 資料表（B-2）、React Flow 畫布（B-3）、
-    Story 列表頁的編輯/刪除功能
+  - **還沒做**：Story 列表頁的編輯/刪除功能
+- [x] **V1 Phase B-2：Question 資料表 + Mind Map 規則式生成**：
+  - 新資料表 `interview_questions`（company_kb 題目與 custom 題目，company_kb 用 partial unique
+    index 去重，第一次被選用時才 materialize，不預先塞資料，避免跟 `companies/*.md` 內容重複維護）
+  - 新資料表 `mind_maps`（存 React Flow 的 `{ nodes, edges }` 格式，一個使用者一個問題一份）
+  - `src/lib/mindmap/build-mindmap.ts`：規則式把 Story 的 STAR + 關鍵字轉成節點/邊結構，
+    **沒有另外呼叫 AI**（STAR 拆解在 B-1 已經做完，這裡純粹是資料格式轉換），已用 Node 腳本驗證過節點/邊數量正確
+  - `POST /api/mindmaps`：故事 + 問題 → 生成並存檔
+  - `/practice/mindmap/stories/[storyId]/build`：選題目（公司題庫或自訂）→ 生成 →
+    先用純清單方式預覽節點結構（**還不是真正的 React Flow 視覺化畫布，那是 B-3 的範圍**）
+  - V1 階段公司只有 ASML 一間，選題畫面先簡化成直接抓第一間公司，
+    之後 `companies/` 底下有多間公司時，這裡需要改成讓使用者先選公司
+  - **還沒做**：Recall Training 互動（Phase C）
+- [x] **V1 Phase B-3：React Flow 畫布 UI**：
+  - 換上正確的套件名稱 `@xyflow/react`（v12），舊的 `reactflow` 套件已經停在 v11 不再維護
+  - `MindMapNodeView`：自訂節點元件，依 root／star／keywords／keyword 四種節點類型給不同樣式
+  - `MindMapCanvas`：畫布 + 基本編輯——點選節點可在下方面板編輯文字、可新增關鍵字節點、
+    可刪除關鍵字節點（**STAR 骨架跟問題節點不開放刪除**，避免誤刪破壞結構），有「儲存」按鈕
+  - `PATCH /api/mindmaps/[id]`：儲存編輯後的節點/邊資料
+  - `/practice/mindmap/view/[mindMapId]`：檢視/編輯頁；故事庫首頁新增「我的 Mind Map」清單區塊
+  - 手機/桌面的分工是「引導使用者在較大螢幕操作比較舒服」，不是程式碼強制限制——
+    React Flow 本身支援觸控手勢，手機上一樣能用，只是操作精細度會差一點
+  - **還沒做**：Recall Training（依 Level 1/2/3 漸進隱藏節點、五秒計時提示）——這是 Phase C
+- [x] **V1 Phase C：Recall Training**：
+  - `PracticeMode` 新增 `"recall"`；`recallContext` / `recallEvaluation` 新型別
+  - **提示機制完全不呼叫 AI**：五秒計時 + 漸進顯示節點是純前端邏輯（`useRecallPractice` +
+    `computeVisibleNodeIds`），只有使用者真的開口回答後才打一次 AI API
+  - 新資料表 `recall_attempts`（衛星表模式，同 `interview_evaluations`），
+    `learning_sessions.mode` 再擴充加入 `"recall"`
+  - **順便修正了一個之前欠著的債**：`interview` 跟 `recall` 這兩個重推理模式，
+    `GeminiProvider` 現在真的會切去 `gemini-3.1-pro-preview`（之前只有 `decomposeStory`
+    有做，`processSpeech` 的 interview 模式其實一直都還在用 Flash，跟規格文件的建議不一致，
+    這次一併修正）
+  - `/practice/mindmap/view/[mindMapId]/recall`：選層級 → 看提示漸進展開 → 開口回答 →
+    AI 評「回憶完整度」跟「自然度」（不是評文法對錯，是評有沒有想起關鍵內容）
+  - **還沒做**：Progress 統計視覺化（時間/完整度趨勢）、Coach Notes（跨 session 記憶）——這是 Phase D 的範圍
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。
