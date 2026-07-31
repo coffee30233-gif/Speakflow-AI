@@ -42,4 +42,9 @@ export class OpenAIProvider implements AIProvider {
     void storyTextZh;
     throw new Error("OpenAIProvider.decomposeStory: not yet implemented");
   }
+
+  async generateGreeting(coachMemory: string): Promise<string> {
+    void coachMemory;
+    throw new Error("OpenAIProvider.generateGreeting: not yet implemented");
+  }
 }

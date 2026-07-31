@@ -271,4 +271,27 @@ export class GeminiProvider implements AIProvider {
 
     return result.data;
   }
+
+  async generateGreeting(coachMemory: string): Promise<string> {
+    const prompt = `你是 SpeakFlow 的英文口說教練，個性溫暖、有耐心、像朋友一樣自然，不是嚴肅的考官。
+
+${coachMemory}
+
+請用繁體中文寫 1-2 句簡短的開場問候語，語氣輕鬆自然，像久違的朋友打招呼。
+可以視情況簡單提到過去的練習（不用每次都提、不用列出所有細節，自然帶過就好），
+最後可以用一句話自然地帶到「準備好開始今天的練習了嗎」這種意思，但不要生硬地寫成制式問句。
+直接回傳問候語文字本身，不要加任何前綴、標籤或引號。`;
+
+    // 開場問候語是輕量任務，用 Flash 就好，不需要 Pro 層級。
+    const response = await this.client.models.generateContent({
+      model: MODEL_ID,
+      contents: [{ text: prompt }],
+    });
+
+    const text = response.text;
+    if (!text) {
+      throw new Error("GeminiProvider.generateGreeting: model returned an empty response");
+    }
+    return text.trim();
+  }
 }

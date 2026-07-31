@@ -7,6 +7,8 @@ import { RecallCanvas } from "@/components/practice/RecallCanvas";
 import { RecallEvaluationBars } from "@/components/practice/RecallEvaluationBars";
 import { GrammarFeedbackList } from "@/components/practice/GrammarFeedbackList";
 import { AudioReplyPlayer } from "@/components/practice/AudioReplyPlayer";
+import { CoachGreeting } from "@/components/practice/CoachGreeting";
+import { useState } from "react";
 import { computeVisibleNodeIds } from "@/lib/mindmap/build-mindmap";
 import type { MindMapNode, MindMapEdge } from "@/lib/mindmap/types";
 
@@ -53,8 +55,14 @@ export function RecallSessionClient({
     backToLevelSelect,
   } = useRecallPractice({ mindMapId, story });
 
+  const [greetingDone, setGreetingDone] = useState(false);
+
   const visibleNodeIds = computeVisibleNodeIds(allNodes, hintLevel);
   const revealFullText = hintLevel >= 3;
+
+  if (!greetingDone) {
+    return <CoachGreeting onContinue={() => setGreetingDone(true)} />;
+  }
 
   if (phase === "select-level") {
     return (

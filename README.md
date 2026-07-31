@@ -141,6 +141,42 @@ AIProvider 介面  src/lib/ai/types.ts
   - 語音合成的 usage_logs 現在會**獨立記一筆**（跟評分呼叫分開），成本追蹤更精準
   - `ChatService.textToSpeech(text)` 簽名也跟著簡化，不再需要傳 `providerId`
     （語音合成本來就跟使用者選的 AIProvider 無關）
+- [x] **V1 Phase D-3：Coach Memory**：
+  - `src/lib/coach/memory.ts`：`buildCoachMemoryContext(userId, supabase)`，
+    **規則式查資料庫組字串，不呼叫 AI**（查最近 3 次 `learning_sessions` + 對應
+    `session_turns` 的平均發音分數，組成「3 天前：模擬面試，平均發音分數 78 分」這種摘要）
+  - `SpeechProcessInput` 新增 `coachMemory` 欄位；`ChatService.processSpeech()`
+    在呼叫 Provider **之前**先查好教練記憶塞進去——維持既有架構邊界：
+    Provider 完全不碰 Supabase，資料庫存取都在 ChatService／API Route 這一層
+  - `buildSpeechPrompt()` 統一在最前面加上教練記憶摘要，**所有模式共用**
+- [x] **V1 Phase D-4：開場小聊天**：
+  - `AIProvider` 新增 `generateGreeting(coachMemory)`，`GeminiProvider` 用 Flash 型號實作
+    （開場問候是輕量任務，不需要 Pro 層級，跟決定「哪些任務要用 Pro」的既有原則一致）
+  - `POST /api/coach/greeting`：查教練記憶 → AI 生成問候語 → 合成語音，一次回傳
+  - 新元件 `CoachGreeting`：面試跟 Recall 練習頁面現在都會先顯示教練的開場問候
+    （文字＋語音），使用者按「準備好了」才進入正式練習
+  - **容錯設計**：開場問候語 API 失敗時，畫面會顯示保底的靜態問候語＋繼續按鈕，
+    不會卡住使用者——開場問候是體驗加分項，不應該變成練習的擋路石
+  - **還沒做**：Live API 即時語音（`gemini-3.1-flash-live-preview`）——這是完全不同的
+    WebSocket 架構，工程量遠大於以上幾項，之前就說過要等 D-1~D-4 穩定後再單獨排
+- [x] **V1 Phase D-5（進行中）：Live API 即時語音——第一步，臨時 Token 核發**：
+  - `src/lib/voice/live-token.ts`：`createLiveSessionToken()`，用 `GEMINI_API_KEY`
+    換一組短命（1 分鐘內要開始連線）的臨時 Token，前端只拿得到這組 Token
+  - `POST /api/live/token`：核發端點，要求登入
+  - `/debug/live-token`：實測頁面，先確認 Token 核發本身能不能成功
+  - ⚠️ **已知問題，需要你實測確認**：如果 `GEMINI_API_KEY` 是新格式（`AQ.` 開頭），
+    `authTokens.create()` 目前查到會回傳 `INVALID_ARGUMENT` 錯誤，只有舊格式
+    （`AIzaSy...` 開頭）的 Key 目前正常。麻煩你先跑一次 `/debug/live-token`，
+    如果失敗且錯誤訊息符合這個描述，需要換一把舊格式的 Key 或等 Google 修這個 bug
+  - **範圍界定，還沒做的部分（工程量最大的還在後面）**：
+    - 前端跟 Gemini 建立實際的 WebSocket 連線
+    - 麥克風連續串流擷取（要用 Web Audio API / AudioWorklet，不是現有的
+      `MediaRecorder`——現有的跟讀/面試/Recall 都是「錄完再送」，Live API 需要
+      邊講邊送，是完全不同的擷取方式）
+    - 即時播放 Gemini 串流回來的音訊
+    - 處理使用者打斷 AI 說話的情境
+    - 整合進面試／Recall 練習流程（要決定：Live API 是取代現有的錄音流程，
+      還是並存的另一個「即時聊天」入口——這是下一步要先討論的架構問題，不是純工程問題）
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

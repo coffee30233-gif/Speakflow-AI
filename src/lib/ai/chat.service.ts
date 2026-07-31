@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAIProvider } from "@/lib/ai/provider.factory";
 import { getVoiceProvider } from "@/lib/voice/voice.factory";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildCoachMemoryContext } from "@/lib/coach/memory";
 import type { SpeechProcessInput, SpeechProcessResult, StoryDecomposition } from "@/lib/ai/types";
 
 /**
@@ -47,7 +48,11 @@ export class ChatService {
     supabase: SupabaseClient,
   ): Promise<SpeechProcessResult> {
     const provider = getAIProvider(providerId);
-    const textResult = await provider.processSpeech(input);
+
+    // 教練記憶是規則式組出來的字串（查資料庫，不呼叫 AI），
+    // 塞進 input 讓 prompt-builder 統一處理，Provider 本身完全不碰 Supabase。
+    const coachMemory = await buildCoachMemoryContext(meta.userId, supabase);
+    const textResult = await provider.processSpeech({ ...input, coachMemory });
 
     // 合成 AI 回覆的語音。這裡故意不透過 provider（AIProvider 已經不再負責語音），
     // 而是呼叫獨立的 VoiceProvider——不管使用者選的是 Gemini 還是之後的 GPT-5.5，
@@ -159,6 +164,40 @@ export class ChatService {
    * 把文字合成語音。獨立於 processSpeech 之外，讓 UI 之後如果需要「單獨合成一段話」
    * （例如 Phase D 的開場小聊天）也能直接用，不用硬塞進 processSpeech 的流程裡。
    */
+  /**
+   * 產生開場問候語（含語音），給 Voice Coach 的開場小聊天用。
+   * 這裡用一個獨立的 admin client 查詢，因為這個方法目前設計成
+   * 「登入即可呼叫」，沒有綁定特定 session，用 admin client 讀自己的歷史紀錄
+   * 反而比要求呼叫端傳一個使用者 session client 更單純。
+   */
+  async getGreeting(
+    providerId: string,
+    userId: string,
+    supabase: SupabaseClient,
+  ): Promise<{ text: string; audioUrl?: string }> {
+    const provider = getAIProvider(providerId);
+    const coachMemory = await buildCoachMemoryContext(userId, supabase);
+    const text = await provider.generateGreeting(coachMemory);
+
+    let audioUrl: string | undefined;
+    try {
+      const voiceProvider = getVoiceProvider();
+      audioUrl = await voiceProvider.synthesizeSpeech(text);
+
+      const admin = createAdminClient();
+      await admin.from("usage_logs").insert({
+        user_id: userId,
+        session_turn_id: null,
+        provider: "gemini",
+        model: provider.id,
+      });
+    } catch (err) {
+      console.warn("[ChatService] greeting voice synthesis failed:", err);
+    }
+
+    return { text, audioUrl };
+  }
+
   async textToSpeech(text: string): Promise<string> {
     const voiceProvider = getVoiceProvider();
     return voiceProvider.synthesizeSpeech(text);

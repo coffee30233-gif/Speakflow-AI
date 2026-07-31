@@ -53,6 +53,12 @@ export interface SpeechProcessInput {
    * 保持 lib/ai 不反過來依賴 lib/mindmap。
    */
   recallContext?: import("@/lib/mindmap/types").RecallContext;
+  /**
+   * 教練記憶摘要（由 ChatService 在呼叫 Provider 之前先查資料庫組好，
+   * 不是 Provider 自己查的——Provider 完全不接觸 Supabase，這是既有的架構邊界）。
+   * 有值時會被塞進 prompt 開頭，讓 AI 能自然提到使用者過去的練習。
+   */
+  coachMemory?: string;
 }
 
 /**
@@ -141,4 +147,11 @@ export interface AIProvider {
    * 但對呼叫端來說完全透明，一樣只是呼叫這個方法。
    */
   decomposeStory(storyTextZh: string): Promise<StoryDecomposition>;
+
+  /**
+   * 產生一句開場問候語（Voice Coach 的開場小聊天用）。
+   * 輸入教練記憶摘要，讓問候語能自然提到過去的練習，不是每次都一樣的罐頭句子。
+   * 這是輕量的文字任務，Provider 內部應該用快、便宜的模型（不用 Pro 層級）。
+   */
+  generateGreeting(coachMemory: string): Promise<string>;
 }

@@ -7,6 +7,8 @@ import { PronunciationScoreRing } from "@/components/practice/PronunciationScore
 import { GrammarFeedbackList } from "@/components/practice/GrammarFeedbackList";
 import { InterviewEvaluationBars } from "@/components/practice/InterviewEvaluationBars";
 import { AudioReplyPlayer } from "@/components/practice/AudioReplyPlayer";
+import { CoachGreeting } from "@/components/practice/CoachGreeting";
+import { useState } from "react";
 import type { DifficultyLevel } from "@/lib/interview/types";
 
 interface InterviewSessionClientProps {
@@ -41,6 +43,16 @@ export function InterviewSessionClient({
     retryCurrentQuestion,
     finishInterview,
   } = useInterviewPractice({ initialQuestion, context });
+
+  const [greetingDone, setGreetingDone] = useState(false);
+
+  if (!greetingDone) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col px-5 pt-6 pb-10">
+        <CoachGreeting onContinue={() => setGreetingDone(true)} />
+      </main>
+    );
+  }
 
   if (phase === "finished") {
     return (

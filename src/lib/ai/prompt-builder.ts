@@ -9,6 +9,17 @@ import { buildRecallPrompt } from "@/lib/mindmap/prompt-builder";
  * 使用者切換模型時，體驗規則不會跑掉。
  */
 export function buildSpeechPrompt(input: SpeechProcessInput): string {
+  const modePrompt = buildModePrompt(input);
+
+  // 教練記憶摘要放在最前面，所有模式都適用——不只面試/Recall，
+  // 跟讀模式的教練口吻回應一樣可以自然提到「歡迎回來」這種話。
+  if (input.coachMemory) {
+    return `${input.coachMemory}\n\n${modePrompt}`;
+  }
+  return modePrompt;
+}
+
+function buildModePrompt(input: SpeechProcessInput): string {
   const base = `你是一位專業的英文口說教練。請針對使用者的語音輸入，回傳以下結構化資訊：
 1. transcript：語音的逐字稿
 2. pronunciationScore：發音評分（0-100）
