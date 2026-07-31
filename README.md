@@ -177,6 +177,17 @@ AIProvider 介面  src/lib/ai/types.ts
     - 處理使用者打斷 AI 說話的情境
     - 整合進面試／Recall 練習流程（要決定：Live API 是取代現有的錄音流程，
       還是並存的另一個「即時聊天」入口——這是下一步要先討論的架構問題，不是純工程問題）
+- [x] **緊急修復（2026-07-31）：Pro 型號撞到 429 配額限制**：
+  - 實測面試模式時發現 `gemini-3.1-pro-preview` 回傳 `429`（配額/速率限制），
+    preview 型號的免費額度通常非常嚴格
+  - **暫時處理**：`gemini.provider.ts` 的 `PRO_MODEL_ID` 常數改指向 `MODEL_ID`（Flash），
+    只改一行，面試／Recall／Story 拆解（B-1）三個原本用 Pro 的地方**一起**改回 Flash——
+    這三個地方都共用同一個常數，會撞到同一個配額問題，不是只有面試模式受影響
+  - **待辦**：去 Google AI Studio 確認 `gemini-3.1-pro-preview` 實際的配額限制／
+    是否需要升級付費方案，確認後把 `PRO_MODEL_ID` 改回 `"gemini-3.1-pro-preview"` 即可復原，
+    不用動任何呼叫端程式碼
+  - 沒做的部分：自動重試邏輯（429 時自動等待重試）——這次只選了「先改回 Flash」，
+    沒有一併加重試機制，之後如果想要可以再加
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

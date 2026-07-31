@@ -25,14 +25,16 @@ import { requiresTechnicalEvaluation } from "@/lib/interview/prompt-builder";
 const MODEL_ID = "gemini-3-flash-preview";
 
 /**
- * 較重的推理任務（Story 拆解、之後的面試/Mind Map 評分）改用 Pro 層級模型，
- * 品質比 Flash 好，代價是速度較慢、成本較高——這種任務通常是一次性、
- * 使用者能接受多等一點時間，跟即時互動的跟讀評分不一樣。
+ * 較重的推理任務（Story 拆解、面試/Mind Map 評分）原本設計要用 Pro 層級模型，
+ * 品質比 Flash 好，代價是速度較慢、成本較高。
  *
- * 注意：原本規格文件寫的是 gemini-2.5-pro，查證後那個型號已經被 Google 棄用
- * （新專案呼叫會直接 404），這裡換成目前的替代型號 gemini-3.1-pro-preview。
+ * ⚠️ 2026-07-31 暫時停用：實測 gemini-3.1-pro-preview 撞到 429（配額/速率限制）——
+ * preview 型號的免費額度通常非常嚴格。在確認實際額度限制或升級付費方案之前，
+ * 先讓這個常數指回 Flash，讓面試／Recall／Story 拆解都能正常運作。
+ * 之後要換回 Pro，只需要把下面這行改回 "gemini-3.1-pro-preview" 這一個地方，
+ * 呼叫端（processSpeech / decomposeStory）完全不用動。
  */
-const PRO_MODEL_ID = "gemini-3.1-pro-preview";
+const PRO_MODEL_ID = MODEL_ID;
 
 /**
  * Gemini 官方文件列出的支援音訊格式：wav / mp3 / aiff / aac / ogg / flac。
