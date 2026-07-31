@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAIProvider } from "@/lib/ai/provider.factory";
+import { getVoiceProvider } from "@/lib/voice/voice.factory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SpeechProcessInput, SpeechProcessResult, StoryDecomposition } from "@/lib/ai/types";
 
@@ -8,10 +9,15 @@ import type { SpeechProcessInput, SpeechProcessResult, StoryDecomposition } from
  * ChatService — UI／API Route 唯一應該呼叫的入口。
  *
  * 架構規則（重要）：
- *   UI  ─────▶  API Route (route.ts)  ─────▶  ChatService  ─────▶  AIProvider
+ *   UI  ─────▶  API Route (route.ts)  ─────▶  ChatService  ─────▶  AIProvider（文字/評分）
+ *                                                          └─────▶  VoiceProvider（語音合成）
  *
- * UI 元件與 API Route 都「不應該」直接 import GeminiProvider 或 OpenAIProvider，
- * 一律透過 ChatService。這樣未來如果要加上：
+ * AIProvider 跟 VoiceProvider 是兩條平行、互相獨立的抽象層：
+ * 換 AIProvider（Gemini/GPT-5.5）只影響「怎麼評分、怎麼推理」，
+ * VoiceProvider 永遠是同一個，教練的聲音不會因為換了文字生成模型而變了一個人。
+ *
+ * UI 元件與 API Route 都「不應該」直接 import GeminiProvider、OpenAIProvider
+ * 或任何 VoiceProvider 實作，一律透過 ChatService。這樣未來如果要加上：
  *   - 使用量計費 / usage_logs 紀錄
  *   - 重試邏輯 / fallback（例如 Gemini 失敗自動改打 OpenAI）
  *   - 回應快取
@@ -41,7 +47,21 @@ export class ChatService {
     supabase: SupabaseClient,
   ): Promise<SpeechProcessResult> {
     const provider = getAIProvider(providerId);
-    const result = await provider.processSpeech(input);
+    const textResult = await provider.processSpeech(input);
+
+    // 合成 AI 回覆的語音。這裡故意不透過 provider（AIProvider 已經不再負責語音），
+    // 而是呼叫獨立的 VoiceProvider——不管使用者選的是 Gemini 還是之後的 GPT-5.5，
+    // 教練的聲音永遠是同一個。用 try/catch 包起來、不讓合成失敗擋住整個回應，
+    // 使用者至少要能看到文字回饋，語音是錦上添花，不是必要條件。
+    let aiReplyAudioUrl: string | undefined;
+    const voiceProvider = getVoiceProvider();
+    try {
+      aiReplyAudioUrl = await voiceProvider.synthesizeSpeech(textResult.aiReplyText);
+    } catch (err) {
+      console.warn("[ChatService] TTS synthesis failed, falling back to text-only:", err);
+    }
+
+    const result: SpeechProcessResult = { ...textResult, aiReplyAudioUrl };
 
     // 寫入 session_turns：用使用者自己的 session client，
     // RLS policy 會檢查這個 session_id 底下的 learning_sessions.user_id 是不是這個使用者。
@@ -112,6 +132,20 @@ export class ChatService {
       if (usageError) {
         console.error("[ChatService] failed to write usage_logs:", usageError);
       }
+
+      // 語音合成是獨立的一次 API 呼叫，成本也要單獨記一筆，不能因為跟評分呼叫綁在同一輪
+      // 對話裡就漏記——usage_logs 的目的就是不能有成本黑洞。
+      if (aiReplyAudioUrl) {
+        const { error: voiceUsageError } = await admin.from("usage_logs").insert({
+          user_id: meta.userId,
+          session_turn_id: turnRow?.id ?? null,
+          provider: "gemini",
+          model: voiceProvider.id,
+        });
+        if (voiceUsageError) {
+          console.error("[ChatService] failed to write usage_logs (voice):", voiceUsageError);
+        }
+      }
     } catch (err) {
       // SUPABASE_SERVICE_ROLE_KEY 沒設定時 createAdminClient() 會 throw，
       // 這種情況下不應該讓整個功能掛掉，只記錄錯誤即可（usage_logs 純粹是內部監控用途）。
@@ -121,9 +155,13 @@ export class ChatService {
     return result;
   }
 
-  async textToSpeech(providerId: string, text: string): Promise<string> {
-    const provider = getAIProvider(providerId);
-    return provider.textToSpeech(text);
+  /**
+   * 把文字合成語音。獨立於 processSpeech 之外，讓 UI 之後如果需要「單獨合成一段話」
+   * （例如 Phase D 的開場小聊天）也能直接用，不用硬塞進 processSpeech 的流程裡。
+   */
+  async textToSpeech(text: string): Promise<string> {
+    const voiceProvider = getVoiceProvider();
+    return voiceProvider.synthesizeSpeech(text);
   }
 
   /**

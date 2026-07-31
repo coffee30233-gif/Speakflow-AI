@@ -9,7 +9,6 @@ import type {
 import { buildSpeechPrompt } from "@/lib/ai/prompt-builder";
 import { speechProcessResultSchema, storyDecompositionSchema } from "@/lib/ai/schemas";
 import { requiresTechnicalEvaluation } from "@/lib/interview/prompt-builder";
-import { parsePcmFormat, pcmBase64ToWavDataUri } from "@/lib/audio/pcm-to-wav";
 
 /**
  * Gemini 3 Flash Provider
@@ -34,14 +33,6 @@ const MODEL_ID = "gemini-3-flash-preview";
  * （新專案呼叫會直接 404），這裡換成目前的替代型號 gemini-3.1-pro-preview。
  */
 const PRO_MODEL_ID = "gemini-3.1-pro-preview";
-
-/**
- * TTS 用固定的一個型號跟固定的一個聲音，讓「SpeakFlow 教練」的聲音身份保持一致——
- * 不管使用者選 Gemini 還是之後接了 OpenAI 當文字生成的模型，教練聽起來都應該是同一個人。
- * 聲音選擇（Kore）目前先用官方範例常見的預設聲音，之後想換聲音只要改這個常數。
- */
-const TTS_MODEL_ID = "gemini-3.1-flash-tts-preview";
-const TTS_VOICE_NAME = "Kore";
 
 /**
  * Gemini 官方文件列出的支援音訊格式：wav / mp3 / aiff / aac / ogg / flac。
@@ -202,43 +193,7 @@ export class GeminiProvider implements AIProvider {
       );
     }
 
-    // 合成 AI 回覆的語音。刻意用 try/catch 包起來、不讓合成失敗擋住整個回應——
-    // 使用者至少要能看到文字回饋，語音是錦上添花，不是必要條件。
-    let aiReplyAudioUrl: string | undefined;
-    try {
-      aiReplyAudioUrl = await this.textToSpeech(result.data.aiReplyText);
-    } catch (err) {
-      console.warn("[GeminiProvider] TTS synthesis failed, falling back to text-only:", err);
-    }
-
-    return { ...result.data, aiReplyAudioUrl };
-  }
-
-  async textToSpeech(text: string): Promise<string> {
-    const response = await this.client.models.generateContent({
-      model: TTS_MODEL_ID,
-      contents: [{ text }],
-      config: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: TTS_VOICE_NAME },
-          },
-        },
-      },
-    });
-
-    const part = response.candidates?.[0]?.content?.parts?.[0];
-    const inlineData = part?.inlineData;
-
-    if (!inlineData?.data) {
-      throw new Error("GeminiProvider.textToSpeech: model returned no audio data");
-    }
-
-    // Gemini TTS 回傳的是裸 PCM（沒有 WAV 檔頭），瀏覽器沒辦法直接播放，
-    // 這裡包成標準 WAV 格式再回傳成 data URI，前端 <audio> 元素可以直接用。
-    const pcmFormat = parsePcmFormat(inlineData.mimeType);
-    return pcmBase64ToWavDataUri(inlineData.data, pcmFormat);
+    return result.data;
   }
 
   async decomposeStory(storyTextZh: string): Promise<StoryDecomposition> {
