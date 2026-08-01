@@ -204,6 +204,20 @@ AIProvider 介面  src/lib/ai/types.ts
   - Phase A 就標記過的未知數，這次真機實測確認：**`audio/mp4` Gemini 可以正常處理**，
     有拿到正常的逐字稿／評分回傳，雖然它沒有寫在 Gemini 官方支援清單裡
   - `KNOWN_SUPPORTED_MIME_TYPES` 已加入 `audio/mp4`，之後不會再跳出誤導性的警告 log
+- [x] **效能優化（2026-08-01）：資料庫寫入搬進背景執行**：
+  - 你回報「跑得有點慢」，查出主因：每一輪對話原本要循序等完「AI 評分 → TTS 合成 →
+    寫 session_turns → 寫 evaluations/recall_attempts → 寫兩筆 usage_logs」全部完成，
+    才把結果回傳給使用者——資料庫寫入其實使用者根本不需要等
+  - 用 Next.js 15.1 的 `after()` API（`next/server`）把所有資料庫寫入搬進背景任務，
+    使用者現在只需要等「AI 評分 + 語音合成」這兩個真正影響回應內容的呼叫完成
+  - `after()` 不是單純不 await（fire-and-forget）——不 await 的 promise 在 serverless
+    環境下很可能還沒跑完，function 就被平台砍掉了；`after()` 會讓 function 在回應
+    送出後繼續存活，把背景工作做完，這是專門為這種情境設計的 API
+  - `getGreeting()` 跟 `decomposeStory()` 的 usage_logs 寫入也一併搬進 `after()`
+  - **沒有變的部分**：AI 評分呼叫 + TTS 合成呼叫還是循序執行、還是會阻塞回應——
+    這兩個是真的需要等待的（TTS 需要先知道 AI 回覆文字才能合成語音），這次優化沒有
+    處理到這塊，如果之後還是覺得慢，需要的是更大的架構改動（例如串流回應），不是這種
+    「把不必要的等待拿掉」的優化能解決的
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。
