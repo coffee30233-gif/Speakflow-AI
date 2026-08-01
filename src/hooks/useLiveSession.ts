@@ -72,6 +72,7 @@ interface UseLiveSessionResult {
   status: LiveSessionStatus;
   errorMessage: string | null;
   messageLog: LiveMessageLogEntry[];
+  conversationTranscript: { role: "user" | "coach"; text: string }[];
   analysis: ConversationAnalysis | null;
   analyzing: boolean;
   connect: () => Promise<void>;
@@ -93,6 +94,9 @@ export function useLiveSession(): UseLiveSessionResult {
   const [messageLog, setMessageLog] = useState<LiveMessageLogEntry[]>([]);
   const [analysis, setAnalysis] = useState<ConversationAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [conversationTranscript, setConversationTranscript] = useState<
+    { role: "user" | "coach"; text: string }[]
+  >([]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sessionRef = useRef<any>(null);
@@ -190,6 +194,7 @@ export function useLiveSession(): UseLiveSessionResult {
     setErrorMessage(null);
     setMessageLog([]);
     setAnalysis(null);
+    setConversationTranscript([]);
     transcriptRef.current = [];
     analysisTriggeredRef.current = false;
 
@@ -213,6 +218,9 @@ export function useLiveSession(): UseLiveSessionResult {
       }
 
       const ai = new GoogleGenAI({ apiKey: tokenJson.token });
+      const systemInstruction = tokenJson.coachMemory
+        ? `${COACH_SYSTEM_PROMPT}\n\n${tokenJson.coachMemory}`
+        : COACH_SYSTEM_PROMPT;
 
       const player = new LiveAudioPlayer(OUTPUT_SAMPLE_RATE);
       playerRef.current = player;
@@ -221,7 +229,7 @@ export function useLiveSession(): UseLiveSessionResult {
         model: LIVE_MODEL_ID,
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: COACH_SYSTEM_PROMPT,
+          systemInstruction,
         },
         callbacks: {
           onopen: () => {
@@ -242,11 +250,15 @@ export function useLiveSession(): UseLiveSessionResult {
             // 斷線後要送去做事後分析（改進點清單）。
             if (content?.inputTranscription?.text) {
               appendLog(`使用者說：${content.inputTranscription.text}`);
-              transcriptRef.current.push({ role: "user", text: content.inputTranscription.text });
+              const entry = { role: "user" as const, text: content.inputTranscription.text };
+              transcriptRef.current.push(entry);
+              setConversationTranscript((prev) => [...prev, entry]);
             }
             if (content?.outputTranscription?.text) {
               appendLog(`AI 說：${content.outputTranscription.text}`);
-              transcriptRef.current.push({ role: "coach", text: content.outputTranscription.text });
+              const entry = { role: "coach" as const, text: content.outputTranscription.text };
+              transcriptRef.current.push(entry);
+              setConversationTranscript((prev) => [...prev, entry]);
             }
 
             // 收到串流音訊，排進播放佇列
@@ -303,5 +315,14 @@ export function useLiveSession(): UseLiveSessionResult {
     await runAnalysis();
   }, [stopMic, runAnalysis]);
 
-  return { status, errorMessage, messageLog, analysis, analyzing, connect, disconnect };
+  return {
+    status,
+    errorMessage,
+    messageLog,
+    conversationTranscript,
+    analysis,
+    analyzing,
+    connect,
+    disconnect,
+  };
 }

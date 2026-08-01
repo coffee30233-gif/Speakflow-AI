@@ -205,9 +205,7 @@ AIProvider 介面  src/lib/ai/types.ts
   - ✅ **2026-08-01 真機實測成功**：完整雙向即時語音對話跑通——連線、麥克風串流、
     AI 語音回應、串流播放、打斷處理全部正常運作，使用者可以直接對著手機說話，
     聽到 AI 即時用語音回應
-  - **還沒做**：整合進實際練習流程——目前只有 `/debug/live-session` 這個獨立測試頁面，
-    還沒決定 Live API 是要取代跟讀/面試/Recall 現有的錄音流程，還是並存的另一個入口，
-    這是下一步要先討論的架構問題
+  - ✅ **已整合進正式導覽**：架構決策確定為「並存」，見下方「Live API 接進正式導覽」條目
 - [x] **實驗功能：教練模式（自然糾正文法）**：
   - `/debug/live-session` 加了「教練模式」開關，開啟後會帶一段 system instruction，
     讓 AI 在對話中順口自然糾正文法/用字（不打斷對話節奏，不是逐句判定對錯）
@@ -292,6 +290,18 @@ AIProvider 介面  src/lib/ai/types.ts
     這兩個是真的需要等待的（TTS 需要先知道 AI 回覆文字才能合成語音），這次優化沒有
     處理到這塊，如果之後還是覺得慢，需要的是更大的架構改動（例如串流回應），不是這種
     「把不必要的等待拿掉」的優化能解決的
+- [x] **Live API 接進正式導覽**：
+  - `/api/live/token` 現在會順便回傳教練記憶摘要（重用既有的 `buildCoachMemoryContext()`），
+    `useLiveSession` 把這段記憶接進 system instruction，讓 Live API 對話也能自然提到
+    過去的練習紀錄——跟面試/Recall 用的是同一套教練記憶邏輯，沒有為 Live API 另外寫一套
+  - `useLiveSession` 新增 `conversationTranscript`（React state，即時更新），
+    供正式 UI 用聊天氣泡呈現對話內容，不用像 debug 頁面那樣看原始訊息 log
+  - 新頁面 `/practice/live-chat`（Server Component，含登入檢查）+
+    `LiveChatSessionClient`（正式互動 UI：連線狀態、即時對話氣泡、結束後顯示
+    「這次聊了什麼」摘要跟「值得注意的地方」清單，重用既有的 `GrammarFeedbackList` 元件）
+  - 首頁加了「跟教練聊聊 🎙️」入口
+  - **架構決策再次確認**：這是**並存**的第三種模式（跟讀/面試/Recall 走既有的
+    「錄完再送」評分流程不變），不是取代——`/debug/live-session` 保留作為除錯用途
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。
