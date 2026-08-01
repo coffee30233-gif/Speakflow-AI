@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useLiveSession } from "@/hooks/useLiveSession";
 
 export default function LiveSessionDebugPage() {
   const { status, errorMessage, messageLog, connect, disconnect } = useLiveSession();
+  const [coachMode, setCoachMode] = useState(false);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 px-5 py-8">
@@ -15,6 +17,16 @@ export default function LiveSessionDebugPage() {
         </p>
       </div>
 
+      <label className="bg-card border-border flex items-center gap-2 rounded-lg border p-3 text-sm">
+        <input
+          type="checkbox"
+          checked={coachMode}
+          onChange={(e) => setCoachMode(e.target.checked)}
+          disabled={status === "connecting" || status === "connected"}
+        />
+        教練模式：對話中自然糾正文法/用字
+      </label>
+
       <div className="bg-card border-border rounded-lg border p-3 text-xs">
         <p>
           狀態：<span className="font-medium">{status}</span>
@@ -24,7 +36,7 @@ export default function LiveSessionDebugPage() {
 
       <div className="flex gap-2">
         <button
-          onClick={connect}
+          onClick={() => connect({ coachMode })}
           disabled={status === "connecting" || status === "connected"}
           className="bg-primary text-primary-foreground flex-1 rounded-lg py-3 text-sm font-medium disabled:opacity-50"
         >

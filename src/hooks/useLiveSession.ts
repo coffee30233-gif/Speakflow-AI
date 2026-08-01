@@ -20,6 +20,26 @@ const LIVE_MODEL_ID = "gemini-3.1-flash-live-preview";
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
 
+/**
+ * 教練模式的 system instruction。重點是「自然糾正」，不是「打斷考試」——
+ * 對話節奏不能被破壞，糾正要像真人教練順口帶過，不是逐句判定對錯。
+ *
+ * 注意：這個糾正是「用語音講出來的建議」，不是結構化 JSON——Live API 的原生語音模型
+ * 只能輸出語音，沒辦法像 processSpeech() 那樣同時吐出可以存檔、算分數的評分資料。
+ * 這是 Live API 跟現有跟讀/面試/Recall 評分流程本質上的差異，不是這次要解決的問題。
+ */
+const COACH_SYSTEM_PROMPT = `你是一位親切、有耐心的英文口說教練，個性溫暖自然，像朋友一樣對話，不是嚴肅的考官。
+
+在對話過程中，如果聽到使用者的文法錯誤、用字不自然，或發音明顯不對的地方，
+請用自然、不打斷對話節奏的方式順口糾正——例如「對了，這裡比較自然的說法會是...」，
+糾正完立刻自然地接回對話，不要生硬地停下來說教，也不要每一句話都糾正，
+只挑比較重要、值得學的地方講就好，維持對話的流暢感跟輕鬆感。`;
+
+interface ConnectOptions {
+  /** 開啟後，AI 會在對話中自然糾正文法/用字，不開啟就是一般對話助理 */
+  coachMode?: boolean;
+}
+
 export type LiveSessionStatus =
   | "idle"
   | "connecting"
@@ -49,7 +69,7 @@ interface UseLiveSessionResult {
   status: LiveSessionStatus;
   errorMessage: string | null;
   messageLog: LiveMessageLogEntry[];
-  connect: () => Promise<void>;
+  connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: () => void;
 }
 
@@ -120,7 +140,7 @@ export function useLiveSession(): UseLiveSessionResult {
     // 我們只是要擷取音訊送出去，不需要在本機播放使用者自己講的話。
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (options?: ConnectOptions) => {
     setStatus("connecting");
     setErrorMessage(null);
     setMessageLog([]);
@@ -139,7 +159,10 @@ export function useLiveSession(): UseLiveSessionResult {
 
       const session = await ai.live.connect({
         model: LIVE_MODEL_ID,
-        config: { responseModalities: [Modality.AUDIO] },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          ...(options?.coachMode ? { systemInstruction: COACH_SYSTEM_PROMPT } : {}),
+        },
         callbacks: {
           onopen: () => {
             appendLog("連線已建立（onopen）");
