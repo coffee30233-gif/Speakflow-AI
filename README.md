@@ -200,6 +200,10 @@ AIProvider 介面  src/lib/ai/types.ts
     （先讓 TTS 呼叫失敗時降級成文字，不要整個卡住，`ChatService.getGreeting` 目前
     已經有 try/catch 包住語音合成那段，理論上不會真的卡住，但這次仍然卡了，
     需要看實際 log 才能確認真正原因）
+- [x] **已解除的風險（2026-08-01）：iOS Safari 錄音格式 `audio/mp4`**：
+  - Phase A 就標記過的未知數，這次真機實測確認：**`audio/mp4` Gemini 可以正常處理**，
+    有拿到正常的逐字稿／評分回傳，雖然它沒有寫在 Gemini 官方支援清單裡
+  - `KNOWN_SUPPORTED_MIME_TYPES` 已加入 `audio/mp4`，之後不會再跳出誤導性的警告 log
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

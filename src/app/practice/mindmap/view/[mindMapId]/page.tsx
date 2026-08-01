@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { MindMapCanvas } from "@/components/practice/MindMapCanvas";
+import { RecallSessionClient } from "@/components/practice/RecallSessionClient";
 import type { ReactFlowData } from "@/lib/mindmap/types";
 
-interface MindMapViewPageProps {
+interface RecallPageProps {
   params: Promise<{ mindMapId: string }>;
 }
 
-export default async function MindMapViewPage({ params }: MindMapViewPageProps) {
+export default async function RecallPage({ params }: RecallPageProps) {
   const { mindMapId } = await params;
 
   const supabase = await createClient();
@@ -17,12 +17,12 @@ export default async function MindMapViewPage({ params }: MindMapViewPageProps) 
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect(`/login?next=/practice/mindmap/view/${mindMapId}`);
+    redirect(`/login?next=/practice/mindmap/view/${mindMapId}/recall`);
   }
 
   const { data: mindMap, error } = await supabase
     .from("mind_maps")
-    .select("id, react_flow_data, question_id, interview_questions ( question_text )")
+    .select("id, react_flow_data, interview_questions ( question_text )")
     .eq("id", mindMapId)
     .single();
 
@@ -41,18 +41,24 @@ export default async function MindMapViewPage({ params }: MindMapViewPageProps) 
   }
 
   const reactFlowData = mindMap.react_flow_data as ReactFlowData;
-  // Supabase 用 foreign table join 撈出來的關聯資料，型別上是陣列或物件視查詢語法而定，
-  // 這裡用型別斷言簡化處理（之後接上 supabase gen types 就不用手動斷言了）
+  const findFullText = (id: string) =>
+    reactFlowData.nodes.find((n) => n.id === id)?.data.fullText ?? "";
+  const keywords = reactFlowData.nodes
+    .filter((n) => n.data.kind === "keyword")
+    .map((n) => n.data.fullText ?? n.data.label);
   const questionText =
     (mindMap as unknown as { interview_questions: { question_text: string } | null })
-      .interview_questions?.question_text ?? "（問題）";
+      .interview_questions?.question_text ?? findFullText("root");
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col px-5 pt-6 pb-10">
       <header className="mb-4 flex items-center justify-between">
-        <Link href="/practice/mindmap" className="text-muted-foreground text-sm">
+        <Link href={`/practice/mindmap/view/${mindMapId}`} className="text-muted-foreground text-sm">
           ← 返回
         </Link>
+        <span className="bg-secondary text-secondary-foreground rounded-full px-3 py-1 text-xs font-medium">
+          Recall Training
+        </span>
       </header>
 
       <div className="mb-4">
@@ -60,18 +66,19 @@ export default async function MindMapViewPage({ params }: MindMapViewPageProps) 
         <h1 className="text-lg font-medium">{questionText}</h1>
       </div>
 
-      <MindMapCanvas
+      <RecallSessionClient
         mindMapId={mindMap.id}
-        initialNodes={reactFlowData.nodes}
-        initialEdges={reactFlowData.edges}
+        allNodes={reactFlowData.nodes}
+        allEdges={reactFlowData.edges}
+        story={{
+          questionText,
+          starSituation: findFullText("star-situation"),
+          starTask: findFullText("star-task"),
+          starAction: findFullText("star-action"),
+          starResult: findFullText("star-result"),
+          keywords,
+        }}
       />
-
-      <Link
-        href={`/practice/mindmap/view/${mindMap.id}/recall`}
-        className="bg-primary text-primary-foreground mt-4 rounded-lg py-3 text-center text-sm font-medium"
-      >
-        開始 Recall 練習 →
-      </Link>
     </main>
   );
 }

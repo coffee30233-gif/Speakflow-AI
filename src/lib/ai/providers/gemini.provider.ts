@@ -38,9 +38,10 @@ const PRO_MODEL_ID = MODEL_ID;
 
 /**
  * Gemini 官方文件列出的支援音訊格式：wav / mp3 / aiff / aac / ogg / flac。
- * iOS Safari 的 MediaRecorder 實際會產生什麼 mimeType（例如 "audio/mp4"），
- * 要等下一步做錄音功能時實測確認，屆時可能需要在前端轉檔或在這裡做格式映射。
- * 這裡先做寬鬆檢查＋警告，不擋住流程，避免格式問題卡死整個功能。
+ * `audio/mp4` 沒有寫在官方清單裡，但 **已在真機（iOS Safari）實測確認可以正常運作**
+ * （2026-08-01，收到正常的逐字稿／評分回傳）——iOS Safari 的 MediaRecorder 實際上就是
+ * 用這個格式錄音，AAC 編碼本身有支援，只是這個 mimeType 字串沒被官方文件明確列出。
+ * 保留這個清單跟警告機制，是為了未來如果遇到「真的」不支援的格式時還能及早發現。
  */
 const KNOWN_SUPPORTED_MIME_TYPES = new Set([
   "audio/wav",
@@ -50,6 +51,7 @@ const KNOWN_SUPPORTED_MIME_TYPES = new Set([
   "audio/aac",
   "audio/ogg",
   "audio/flac",
+  "audio/mp4", // iOS Safari 實測確認可用，見上方說明
 ]);
 
 export class GeminiProvider implements AIProvider {
