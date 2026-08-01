@@ -169,14 +169,28 @@ AIProvider 介面  src/lib/ai/types.ts
     （`AIzaSy...` 開頭）的 Key 目前正常。麻煩你先跑一次 `/debug/live-token`，
     如果失敗且錯誤訊息符合這個描述，需要換一把舊格式的 Key 或等 Google 修這個 bug
   - **範圍界定，還沒做的部分（工程量最大的還在後面）**：
-    - 前端跟 Gemini 建立實際的 WebSocket 連線
-    - 麥克風連續串流擷取（要用 Web Audio API / AudioWorklet，不是現有的
-      `MediaRecorder`——現有的跟讀/面試/Recall 都是「錄完再送」，Live API 需要
-      邊講邊送，是完全不同的擷取方式）
-    - 即時播放 Gemini 串流回來的音訊
-    - 處理使用者打斷 AI 說話的情境
+    - ~~前端跟 Gemini 建立實際的 WebSocket 連線~~ ✅ 見下方第二步
+    - ~~麥克風連續串流擷取~~ ✅ 見下方第二步
+    - 即時播放 Gemini 串流回來的音訊——**還沒做**
+    - 處理使用者打斷 AI 說話的情境——**還沒做**
     - 整合進面試／Recall 練習流程（要決定：Live API 是取代現有的錄音流程，
-      還是並存的另一個「即時聊天」入口——這是下一步要先討論的架構問題，不是純工程問題）
+      還是並存的另一個「即時聊天」入口——這是還沒討論的架構問題，不是純工程問題）
+- [x] **V1 Phase D-5（進行中）：Live API 即時語音——第二步，前端連線＋麥克風串流**：
+  - `public/worklets/pcm-recorder-processor.js`：AudioWorklet，即時把麥克風原始音訊
+    （Float32）轉成 Gemini 要求的格式（16-bit PCM、16kHz、little-endian）
+  - `src/hooks/useLiveSession.ts`：核心邏輯——拿臨時 Token → 用 `@google/genai` SDK
+    直接在瀏覽器呼叫 `ai.live.connect()` → 建立麥克風串流 → 透過
+    `session.sendRealtimeInput()` 持續送出音訊
+  - `/debug/live-session`：實測頁面，顯示連線狀態跟收到的訊息 log
+  - ⚠️ **這次沒辦法先驗證過再交給你，需要你實測**：這裡沙盒環境沒有網路，
+    沒辦法真的連線測試。而且發現一個矛盾的地方——Google 官方主要文件教的是
+    直接在瀏覽器用 `@google/genai` SDK（`apiKey` 帶臨時 Token）連線，
+    但 Google 另一份官方 GitHub 範例反而是**不用這個 SDK、手刻原生 WebSocket**。
+    這代表 SDK 在瀏覽器 bundle 環境下能不能正常運作，沒有百分之百把握，
+    需要你實測 `/debug/live-session` 才能確認。如果打包或連線出現奇怪的錯誤
+    （尤其是 Node-only 依賴相關的錯誤），備案是改成不依賴 SDK 的原生 WebSocket 實作
+  - **這一步刻意還沒做的部分**：播放 Gemini 回傳的語音（目前只會在訊息 log 顯示收到的
+    原始訊息內容）、處理使用者打斷、整合進實際練習流程——照原計畫留到下一步
 - [x] **緊急修復（2026-07-31）：Pro 型號撞到 429 配額限制**：
   - 實測面試模式時發現 `gemini-3.1-pro-preview` 回傳 `429`（配額/速率限制），
     preview 型號的免費額度通常非常嚴格
