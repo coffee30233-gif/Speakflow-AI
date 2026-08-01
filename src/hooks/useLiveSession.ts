@@ -2,24 +2,23 @@
 
 import { useCallback, useRef, useState } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
+import { LiveAudioPlayer } from "@/lib/audio/live-audio-player";
 
 /**
  * Live API 前端連線 Hook。
  *
- * 這一步的範圍：建立 WebSocket 連線 + 麥克風連續串流擷取 + 送出音訊。
- * 還沒做：播放 Gemini 回傳的串流音訊、處理使用者打斷、整合進練習流程——
- * 那些是下一步的範圍，這裡先確保「連線＋送音訊」這個地基是通的。
+ * 這一步的範圍：建立 WebSocket 連線 + 麥克風連續串流擷取 + 送出音訊 +
+ * 即時播放 Gemini 回傳的串流語音 + 處理使用者打斷。
+ * 還沒做：整合進實際練習流程（面試／Recall）——那是下一步，
+ * 這裡先確保完整的雙向即時語音對話這個地基是通的。
  *
- * ⚠️ 這裡直接在瀏覽器用 @google/genai SDK 呼叫 ai.live.connect()，
- * 是照 Google 官方文件的建議寫法（apiKey 帶臨時 Token），但這個 SDK
- * 主要是為 Node.js 設計的，能不能在瀏覽器的 bundle 環境正常運作、
- * 沒有踩到某些 Node-only 的內部依賴，這件事需要實測才能確認。
- * 如果打包或執行時出現奇怪的錯誤，備案是改用不依賴 SDK 的原生 WebSocket 實作
- * （Google 官方也有另一份範例是這樣做的）。
+ * @google/genai SDK 在瀏覽器直接用 ai.live.connect() 已經實測確認可以正常運作
+ * （2026-08-01 真機測試成功，收到正確的 inputTranscription 跟串流音訊回覆）。
  */
 
 const LIVE_MODEL_ID = "gemini-3.1-flash-live-preview";
 const INPUT_SAMPLE_RATE = 16000;
+const OUTPUT_SAMPLE_RATE = 24000;
 
 export type LiveSessionStatus =
   | "idle"
@@ -31,6 +30,19 @@ export type LiveSessionStatus =
 interface LiveMessageLogEntry {
   timestamp: number;
   summary: string;
+}
+
+/** Live API 訊息裡我們會用到的欄位（其餘欄位不影響功能，用 unknown 帶過即可） */
+interface LiveServerMessage {
+  serverContent?: {
+    modelTurn?: {
+      parts?: { inlineData?: { mimeType?: string; data?: string } }[];
+    };
+    interrupted?: boolean;
+    turnComplete?: boolean;
+    inputTranscription?: { text?: string };
+    outputTranscription?: { text?: string };
+  };
 }
 
 interface UseLiveSessionResult {
@@ -60,6 +72,7 @@ export function useLiveSession(): UseLiveSessionResult {
   const audioContextRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const playerRef = useRef<LiveAudioPlayer | null>(null);
 
   const appendLog = useCallback((summary: string) => {
     setMessageLog((prev) => [...prev.slice(-49), { timestamp: Date.now(), summary }]);
@@ -121,6 +134,9 @@ export function useLiveSession(): UseLiveSessionResult {
 
       const ai = new GoogleGenAI({ apiKey: tokenJson.token });
 
+      const player = new LiveAudioPlayer(OUTPUT_SAMPLE_RATE);
+      playerRef.current = player;
+
       const session = await ai.live.connect({
         model: LIVE_MODEL_ID,
         config: { responseModalities: [Modality.AUDIO] },
@@ -129,8 +145,35 @@ export function useLiveSession(): UseLiveSessionResult {
             appendLog("連線已建立（onopen）");
             setStatus("connected");
           },
-          onmessage: (message: unknown) => {
-            appendLog(`收到訊息：${JSON.stringify(message).slice(0, 120)}`);
+          onmessage: (message: LiveServerMessage) => {
+            const content = message.serverContent;
+
+            // 使用者打斷 AI 說話：把還在播放的音訊全部停掉，避免新舊回覆疊在一起
+            if (content?.interrupted) {
+              appendLog("使用者打斷了 AI 的回覆，停止播放");
+              player.interrupt();
+              return;
+            }
+
+            // 逐字稿訊息（方便除錯時確認音訊有沒有被正確辨識，不是必要功能）
+            if (content?.inputTranscription?.text) {
+              appendLog(`使用者說：${content.inputTranscription.text}`);
+            }
+            if (content?.outputTranscription?.text) {
+              appendLog(`AI 說：${content.outputTranscription.text}`);
+            }
+
+            // 收到串流音訊，排進播放佇列
+            const parts = content?.modelTurn?.parts ?? [];
+            for (const part of parts) {
+              if (part.inlineData?.data) {
+                void player.enqueueChunk(part.inlineData.data);
+              }
+            }
+
+            if (content?.turnComplete) {
+              appendLog("這一輪對話結束（turnComplete）");
+            }
           },
           onerror: (e: { message?: string }) => {
             appendLog(`連線錯誤：${e?.message ?? "unknown"}`);
@@ -140,6 +183,11 @@ export function useLiveSession(): UseLiveSessionResult {
           onclose: (e: { reason?: string }) => {
             appendLog(`連線關閉：${e?.reason ?? ""}`);
             setStatus("closed");
+            // 這裡的關閉可能是 Gemini 那邊主動斷線（不是使用者按了「結束連線」），
+            // 麥克風跟播放器的資源一樣要清掉，不然會一直佔用麥克風。
+            stopMic();
+            playerRef.current?.close();
+            playerRef.current = null;
           },
         },
       });
@@ -151,10 +199,12 @@ export function useLiveSession(): UseLiveSessionResult {
       setErrorMessage(err instanceof Error ? err.message : "連線失敗");
       setStatus("error");
     }
-  }, [appendLog, startMic]);
+  }, [appendLog, startMic, stopMic]);
 
   const disconnect = useCallback(() => {
     stopMic();
+    playerRef.current?.close();
+    playerRef.current = null;
     try {
       sessionRef.current?.close();
     } catch (err) {

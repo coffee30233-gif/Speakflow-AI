@@ -182,15 +182,29 @@ AIProvider 介面  src/lib/ai/types.ts
     直接在瀏覽器呼叫 `ai.live.connect()` → 建立麥克風串流 → 透過
     `session.sendRealtimeInput()` 持續送出音訊
   - `/debug/live-session`：實測頁面，顯示連線狀態跟收到的訊息 log
-  - ⚠️ **這次沒辦法先驗證過再交給你，需要你實測**：這裡沙盒環境沒有網路，
-    沒辦法真的連線測試。而且發現一個矛盾的地方——Google 官方主要文件教的是
-    直接在瀏覽器用 `@google/genai` SDK（`apiKey` 帶臨時 Token）連線，
-    但 Google 另一份官方 GitHub 範例反而是**不用這個 SDK、手刻原生 WebSocket**。
-    這代表 SDK 在瀏覽器 bundle 環境下能不能正常運作，沒有百分之百把握，
-    需要你實測 `/debug/live-session` 才能確認。如果打包或連線出現奇怪的錯誤
-    （尤其是 Node-only 依賴相關的錯誤），備案是改成不依賴 SDK 的原生 WebSocket 實作
+  - ✅ **2026-08-01 真機實測成功**：`@google/genai` SDK 在瀏覽器打包、執行都正常，
+    不用改成手刻 WebSocket 的備案了。實測收到 `inputTranscription: "My name is Shanling Ye."`——
+    證實麥克風擷取→PCM 轉換→WebSocket 送出這條管線的音訊格式、取樣率全部正確，
+    Gemini 也有正常用串流語音回應（`modelTurn` 帶 24kHz PCM 音訊資料），
+    連 `interrupted`／`turnComplete`／`sessionResumptionUpdate` 這些協定層級的訊號都正常收到
   - **這一步刻意還沒做的部分**：播放 Gemini 回傳的語音（目前只會在訊息 log 顯示收到的
-    原始訊息內容）、處理使用者打斷、整合進實際練習流程——照原計畫留到下一步
+    原始訊息內容，還沒接到 Web Audio API 播出來）、處理使用者打斷、整合進實際練習流程——
+    照原計畫留到下一步
+- [x] **V1 Phase D-5（進行中）：Live API 即時語音——第三步，即時播放＋打斷處理**：
+  - `src/lib/audio/live-audio-player.ts`：`LiveAudioPlayer` class，用 Web Audio API
+    的 `AudioBufferSourceNode` 排程播放時間，讓一段一段收到的 PCM 音訊接續播放，
+    不會有段落間的空隙／喀嚓聲——這跟之前 TTS 用的「等全部生成完再包成 WAV 播」是
+    完全不同的做法，這裡是真正的串流播放
+  - `interrupt()`：對應 Live API 的 `interrupted: true` 訊號，把還在播放的音訊全部停掉、
+    播放游標歸零，避免使用者打斷後新舊回覆的語音疊在一起
+  - `useLiveSession.ts` 更新：`onmessage` 現在會解析 `modelTurn.parts[].inlineData`
+    餵進播放器、解析 `interrupted` 觸發打斷、順便把 `inputTranscription` /
+    `outputTranscription` 也印進訊息 log 方便除錯
+  - 連線意外斷線時（`onclose`，不一定是使用者手動按「結束連線」）也會清掉麥克風跟播放器資源，
+    避免麥克風被一直佔用
+  - **還沒做**：整合進實際練習流程——目前只有 `/debug/live-session` 這個獨立測試頁面，
+    還沒決定 Live API 是要取代跟讀/面試/Recall 現有的錄音流程，還是並存的另一個入口，
+    這是下一步要先討論的架構問題
 - [x] **緊急修復（2026-07-31）：Pro 型號撞到 429 配額限制**：
   - 實測面試模式時發現 `gemini-3.1-pro-preview` 回傳 `429`（配額/速率限制），
     preview 型號的免費額度通常非常嚴格

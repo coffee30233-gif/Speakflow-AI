@@ -10,8 +10,8 @@ export default function LiveSessionDebugPage() {
       <div>
         <h1 className="text-xl font-semibold">Live API 連線實測</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          測試前端 WebSocket 連線＋麥克風串流擷取。目前還沒有播放回傳的語音，
-          先確認連線跟送出音訊這段能不能正常運作。
+          測試前端 WebSocket 連線＋麥克風串流擷取＋即時語音播放。
+          連線後直接對著手機說話，應該會聽到 AI 用語音回應。
         </p>
       </div>
 
