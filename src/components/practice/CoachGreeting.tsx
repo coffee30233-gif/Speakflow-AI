@@ -16,18 +16,28 @@ type State =
  * Voice Coach 的開場小聊天畫面。載入時打一次 /api/coach/greeting，
  * 拿到問候語文字＋語音就顯示，使用者按「準備好了」才進入正式練習。
  *
- * 失敗時不擋住使用者——直接顯示一個保底的靜態問候語跟繼續按鈕，
- * 開場問候是體驗加分項，不應該變成練習的擋路石。
+ * 容錯設計（兩層）：
+ *   1. API 明確回傳錯誤／格式不對 → 顯示保底問候語
+ *   2. 請求逾時（8 秒內沒回應，例如語音合成卡住或很慢）→ 用 AbortController 主動中斷，
+ *      一樣顯示保底問候語
+ * 開場問候是體驗加分項，不應該變成使用者卡住進不了練習的擋路石——
+ * 之前的版本只做了第 1 層，沒做第 2 層，導致請求卡住時畫面會永遠停在 loading。
  */
+const GREETING_TIMEOUT_MS = 8000;
+
 export function CoachGreeting({ onContinue }: CoachGreetingProps) {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GREETING_TIMEOUT_MS);
+
     fetch("/api/coach/greeting", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
+      signal: controller.signal,
     })
       .then((res) => res.json())
       .then((json) => {
@@ -39,10 +49,18 @@ export function CoachGreeting({ onContinue }: CoachGreetingProps) {
         }
       })
       .catch(() => {
+        // fetch 被 AbortController 中斷、或請求本身失敗，都算進這裡，
+        // 一律降級成保底問候語，不管實際原因是什麼。
         if (!cancelled) setState({ status: "error" });
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
       });
+
     return () => {
       cancelled = true;
+      controller.abort();
+      clearTimeout(timeoutId);
     };
   }, []);
 
