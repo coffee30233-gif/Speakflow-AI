@@ -218,6 +218,26 @@ AIProvider 介面  src/lib/ai/types.ts
     不是取代現有評分流程的候選
   - 順手修正一個小 bug：`onClick={connect}` 這種寫法會把 React 的滑鼠事件物件當成
     `connect()` 的參數傳進去，已經改成 `onClick={() => connect({ coachMode })}`
+- [x] **Live API 對話事後分析（改進點紀錄）**：
+  - `learning_sessions.mode` 新增 `"live_chat"`（新 migration），跟現有的 `freetalk`
+    分開記，方便之後篩選/統計 Live API 對話跟一般自由對話
+  - `AIProvider` 新增 `analyzeConversation(transcript)`：純文字輸入輸出的事後分析，
+    不是即時對話當下呼叫的——這正好是 Live API 能力邊界的解法：原生語音模型沒辦法
+    在對話當下同時吐出結構化評分，那就在**對話結束後**把逐字稿當純文字送去分析，
+    重用既有的 `GrammarFeedbackItem` 格式（`original`／`suggestion`／`reason`），
+    讓 Live API 對話的分析結果跟其他模式的評分資料格式一致
+  - `ChatService.analyzeLiveConversation()`：呼叫分析、寫進 `session_turns`
+    （`turn_index: 0` 代表整段對話算一輪紀錄），資料庫寫入一樣包進 `after()` 背景任務
+  - `POST /api/live/analyze`：分析 API
+  - `useLiveSession.ts` 更新：
+    - 連線時自動建立 `learning_sessions`（mode `live_chat`）
+    - 對話過程中累積 `inputTranscription`／`outputTranscription` 逐字稿
+    - 斷線時（不管是手動按「結束連線」還是連線意外中斷）自動送出分析、拿回改進點清單，
+      並用旗標避免 `disconnect()` 跟 `onclose` 兩邊都觸發分析造成重複呼叫
+  - `/debug/live-session` 加了「對話總結」跟「需要改進的地方」清單顯示區塊
+  - **還沒實測**：這一步沒有真機測試過，邏輯是照既有的 `decomposeStory`／
+    `session_turns` 寫入模式做的（同一套已經驗證過的架構），但完整流程
+    （連線→對話→斷線→分析→顯示）還需要你實際跑一次確認
 - [x] **緊急修復（2026-07-31）：Pro 型號撞到 429 配額限制**：
   - 實測面試模式時發現 `gemini-3.1-pro-preview` 回傳 `429`（配額/速率限制），
     preview 型號的免費額度通常非常嚴格
@@ -335,9 +355,3 @@ Next.js 官方有提供自動轉換工具：`npx @next/codemod@canary middleware
 4. 若失敗，把錯誤訊息回報回來，會依實際錯誤調整 `GeminiProvider` 裡的 mimeType 處理邏輯
 
 `/debug/recorder` 是開發階段的除錯頁面，正式上線前需要移除或加上存取限制。
-- [ ] Firestore Security Rules
-- [ ] 跟讀模式（Shadowing）UI
-- [ ] shadcn/ui 元件安裝（`npx shadcn@latest add button card ...`）
-- [ ] PWA icons（見 `public/icons/README.md`）
-
-依照開發規範，以上每一項會分別實作、逐一確認後再進行下一步。

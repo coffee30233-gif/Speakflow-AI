@@ -4,6 +4,7 @@ import type {
   SpeechProcessInput,
   SpeechProcessResult,
   StoryDecomposition,
+  ConversationAnalysis,
 } from "@/lib/ai/types";
 import { buildSpeechPrompt } from "@/lib/ai/prompt-builder";
 
@@ -46,5 +47,10 @@ export class OpenAIProvider implements AIProvider {
   async generateGreeting(coachMemory: string): Promise<string> {
     void coachMemory;
     throw new Error("OpenAIProvider.generateGreeting: not yet implemented");
+  }
+
+  async analyzeConversation(transcript: string): Promise<ConversationAnalysis> {
+    void transcript;
+    throw new Error("OpenAIProvider.analyzeConversation: not yet implemented");
   }
 }

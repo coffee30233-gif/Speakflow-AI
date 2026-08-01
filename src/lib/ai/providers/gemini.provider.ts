@@ -5,9 +5,14 @@ import type {
   SpeechProcessInput,
   SpeechProcessResult,
   StoryDecomposition,
+  ConversationAnalysis,
 } from "@/lib/ai/types";
 import { buildSpeechPrompt } from "@/lib/ai/prompt-builder";
-import { speechProcessResultSchema, storyDecompositionSchema } from "@/lib/ai/schemas";
+import {
+  speechProcessResultSchema,
+  storyDecompositionSchema,
+  conversationAnalysisSchema,
+} from "@/lib/ai/schemas";
 import { requiresTechnicalEvaluation } from "@/lib/interview/prompt-builder";
 
 /**
@@ -297,5 +302,74 @@ ${coachMemory}
       throw new Error("GeminiProvider.generateGreeting: model returned an empty response");
     }
     return text.trim();
+  }
+
+  async analyzeConversation(transcript: string): Promise<ConversationAnalysis> {
+    const prompt = `你是一位英文口說教練。以下是使用者跟 AI 教練進行的一段口語對話逐字稿
+（"User" 代表使用者說的話，"Coach" 代表 AI 教練說的話）。
+
+請分析這段對話，找出使用者口說中出現的文法錯誤、用字不自然，或可以講得更道地的地方，
+整理成清單。如果對話中使用者的英文已經很好、沒有明顯需要改進的地方，improvementPoints
+回傳空陣列即可，不要為了湊數硬找問題。
+
+逐字稿：
+「${transcript}」
+
+請回傳：
+1. summary：這次對話練習的簡短總結（練習了什麼主題、整體表現如何），1-2 句話
+2. improvementPoints：陣列，每項包含：
+   - original：使用者原本說的（或不夠自然的）片段
+   - suggestion：建議的說法
+   - reason：為什麼這樣改比較好`;
+
+    const response = await this.client.models.generateContent({
+      model: MODEL_ID,
+      contents: [{ text: prompt }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            summary: { type: Type.STRING },
+            improvementPoints: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  original: { type: Type.STRING },
+                  suggestion: { type: Type.STRING },
+                  reason: { type: Type.STRING },
+                },
+                required: ["original", "suggestion", "reason"],
+              },
+            },
+          },
+          required: ["summary", "improvementPoints"],
+        },
+      },
+    });
+
+    const rawText = response.text;
+    if (!rawText) {
+      throw new Error("GeminiProvider.analyzeConversation: model returned an empty response");
+    }
+
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(rawText);
+    } catch {
+      throw new Error(
+        `GeminiProvider.analyzeConversation: model returned invalid JSON: ${rawText.slice(0, 200)}`,
+      );
+    }
+
+    const result = conversationAnalysisSchema.safeParse(parsedJson);
+    if (!result.success) {
+      throw new Error(
+        `GeminiProvider.analyzeConversation: response failed schema validation: ${result.error.message}`,
+      );
+    }
+
+    return result.data;
   }
 }

@@ -5,7 +5,12 @@ import { getAIProvider } from "@/lib/ai/provider.factory";
 import { getVoiceProvider } from "@/lib/voice/voice.factory";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildCoachMemoryContext } from "@/lib/coach/memory";
-import type { SpeechProcessInput, SpeechProcessResult, StoryDecomposition } from "@/lib/ai/types";
+import type {
+  SpeechProcessInput,
+  SpeechProcessResult,
+  StoryDecomposition,
+  ConversationAnalysis,
+} from "@/lib/ai/types";
 
 /**
  * ChatService — UI／API Route 唯一應該呼叫的入口。
@@ -209,6 +214,56 @@ export class ChatService {
     }
 
     return { text, audioUrl };
+  }
+
+  /**
+   * 分析一段 Live API 即時對話的完整逐字稿，抓出改進點，寫進 session_turns
+   * （用 turn_index 0，代表整段對話當作一輪紀錄，跟其他模式「一輪語音互動一筆」
+   * 的資料結構不完全一樣，但欄位格式共用，之後串歷史紀錄可以一起顯示）。
+   */
+  async analyzeLiveConversation(
+    providerId: string,
+    transcript: string,
+    meta: { userId: string; sessionId: string },
+    supabase: SupabaseClient,
+  ): Promise<ConversationAnalysis> {
+    const provider = getAIProvider(providerId);
+    const analysis = await provider.analyzeConversation(transcript);
+
+    after(async () => {
+      const { data: turnRow, error: turnError } = await supabase
+        .from("session_turns")
+        .insert({
+          session_id: meta.sessionId,
+          turn_index: 0,
+          transcript,
+          grammar_feedback: analysis.improvementPoints,
+          ai_reply_text: analysis.summary,
+        })
+        .select("id")
+        .single();
+
+      if (turnError) {
+        console.error("[ChatService] failed to write session_turns (live_chat):", turnError);
+      }
+
+      try {
+        const admin = createAdminClient();
+        const { error: usageError } = await admin.from("usage_logs").insert({
+          user_id: meta.userId,
+          session_turn_id: turnRow?.id ?? null,
+          provider: provider.id.startsWith("gemini") ? "gemini" : "openai",
+          model: provider.id,
+        });
+        if (usageError) {
+          console.error("[ChatService] failed to write usage_logs (live_chat):", usageError);
+        }
+      } catch (err) {
+        console.error("[ChatService] admin client unavailable, skipping usage_logs:", err);
+      }
+    });
+
+    return analysis;
   }
 
   async textToSpeech(text: string): Promise<string> {

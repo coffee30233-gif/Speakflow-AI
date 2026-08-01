@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useLiveSession } from "@/hooks/useLiveSession";
 
 export default function LiveSessionDebugPage() {
-  const { status, errorMessage, messageLog, connect, disconnect } = useLiveSession();
+  const { status, errorMessage, messageLog, analysis, analyzing, connect, disconnect } =
+    useLiveSession();
   const [coachMode, setCoachMode] = useState(false);
 
   return (
@@ -67,6 +68,47 @@ export default function LiveSessionDebugPage() {
           ))}
         </div>
       </div>
+
+      {analyzing && (
+        <div className="bg-card border-border rounded-lg border p-3 text-sm">
+          <p className="text-muted-foreground">正在分析這次對話的改進點…</p>
+        </div>
+      )}
+
+      {analysis && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3">
+            <p className="mb-1 text-xs font-medium text-green-600">對話總結</p>
+            <p className="text-sm">{analysis.summary}</p>
+          </div>
+
+          <div>
+            <p className="text-muted-foreground mb-2 text-xs">
+              需要改進的地方（{analysis.improvementPoints.length} 項）
+            </p>
+            {analysis.improvementPoints.length === 0 ? (
+              <p className="bg-card border-border rounded-lg border p-3 text-sm">
+                這次對話沒有發現明顯需要改進的地方 🎉
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {analysis.improvementPoints.map((item, i) => (
+                  <div key={i} className="bg-card border-border rounded-lg border p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-destructive line-through decoration-2">
+                        {item.original}
+                      </span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="font-medium text-green-600">{item.suggestion}</span>
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-xs">{item.reason}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

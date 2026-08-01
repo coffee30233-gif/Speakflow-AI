@@ -18,7 +18,7 @@ export interface ChatTurn {
   text: string;
 }
 
-export type PracticeMode = "shadowing" | "freetalk" | "scenario" | "interview" | "recall";
+export type PracticeMode = "shadowing" | "freetalk" | "scenario" | "interview" | "recall" | "live_chat";
 
 export interface GrammarFeedbackItem {
   original: string;
@@ -124,6 +124,19 @@ export interface StoryDecomposition {
 }
 
 /**
+ * Live API 即時對話結束後，對整段逐字稿做事後分析的結果。
+ * 這是 Live API 能力邊界的解法：原生語音模型沒辦法在對話當下同時吐出
+ * 結構化評分資料，所以改成「對話結束後，把逐字稿當純文字丟給既有的
+ * 文字分析能力」，重用 GrammarFeedbackItem 這個既有型別，
+ * 讓 Live API 對話的分析結果跟其他模式的評分資料格式一致，能一起存、一起看。
+ */
+export interface ConversationAnalysis {
+  /** 這次對話練習的簡短總結（練習了什麼、整體表現如何） */
+  summary: string;
+  improvementPoints: GrammarFeedbackItem[];
+}
+
+/**
  * 所有 AI 供應商都必須實作這個介面。
  * 這是整個 Provider Pattern 的核心契約。
  */
@@ -154,4 +167,10 @@ export interface AIProvider {
    * 這是輕量的文字任務，Provider 內部應該用快、便宜的模型（不用 Pro 層級）。
    */
   generateGreeting(coachMemory: string): Promise<string>;
+
+  /**
+   * 分析一段 Live API 即時對話的完整逐字稿，抓出值得改進的地方。
+   * 純文字輸入輸出，事後分析用，不是即時對話當下呼叫的。
+   */
+  analyzeConversation(transcript: string): Promise<ConversationAnalysis>;
 }

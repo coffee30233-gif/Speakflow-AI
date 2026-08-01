@@ -44,3 +44,9 @@ export const storyDecompositionSchema = z.object({
   keywords: z.array(z.string()).min(1),
   bestAnswerEn: z.string(),
 });
+
+/** 對應 ConversationAnalysis（Live API 對話事後分析） */
+export const conversationAnalysisSchema = z.object({
+  summary: z.string(),
+  improvementPoints: z.array(grammarFeedbackItemSchema),
+});

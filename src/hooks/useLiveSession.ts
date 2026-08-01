@@ -3,6 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { LiveAudioPlayer } from "@/lib/audio/live-audio-player";
+import { createLearningSession, endLearningSession } from "@/lib/session/client";
+import type { ConversationAnalysis } from "@/lib/ai/types";
 
 /**
  * Live API 前端連線 Hook。
@@ -19,6 +21,8 @@ import { LiveAudioPlayer } from "@/lib/audio/live-audio-player";
 const LIVE_MODEL_ID = "gemini-3.1-flash-live-preview";
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
+/** 對話結束後事後分析逐字稿用的 provider（不是即時對話本身用的模型） */
+const ANALYSIS_PROVIDER_ID = "gemini-3-flash-preview";
 
 /**
  * 教練模式的 system instruction。重點是「自然糾正」，不是「打斷考試」——
@@ -69,8 +73,10 @@ interface UseLiveSessionResult {
   status: LiveSessionStatus;
   errorMessage: string | null;
   messageLog: LiveMessageLogEntry[];
+  analysis: ConversationAnalysis | null;
+  analyzing: boolean;
   connect: (options?: ConnectOptions) => Promise<void>;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -86,6 +92,8 @@ export function useLiveSession(): UseLiveSessionResult {
   const [status, setStatus] = useState<LiveSessionStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [messageLog, setMessageLog] = useState<LiveMessageLogEntry[]>([]);
+  const [analysis, setAnalysis] = useState<ConversationAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sessionRef = useRef<any>(null);
@@ -93,6 +101,11 @@ export function useLiveSession(): UseLiveSessionResult {
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const playerRef = useRef<LiveAudioPlayer | null>(null);
+  const learningSessionIdRef = useRef<string | null>(null);
+  /** 累積這場對話的逐字稿，斷線時送去做事後分析 */
+  const transcriptRef = useRef<{ role: "user" | "coach"; text: string }[]>([]);
+  /** 避免 disconnect() 跟 onclose 兩邊都觸發分析，造成重複呼叫 */
+  const analysisTriggeredRef = useRef(false);
 
   const appendLog = useCallback((summary: string) => {
     setMessageLog((prev) => [...prev.slice(-49), { timestamp: Date.now(), summary }]);
@@ -140,10 +153,58 @@ export function useLiveSession(): UseLiveSessionResult {
     // 我們只是要擷取音訊送出去，不需要在本機播放使用者自己講的話。
   }, []);
 
+  const runAnalysis = useCallback(async () => {
+    if (analysisTriggeredRef.current) return;
+    analysisTriggeredRef.current = true;
+
+    const sessionId = learningSessionIdRef.current;
+    const turns = transcriptRef.current;
+    if (!sessionId || turns.length === 0) return;
+
+    const transcriptText = turns
+      .map((t) => `${t.role === "user" ? "User" : "Coach"}: ${t.text}`)
+      .join("\n");
+
+    setAnalyzing(true);
+    try {
+      const res = await fetch("/api/live/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, transcript: transcriptText }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setAnalysis(json as ConversationAnalysis);
+      } else {
+        console.error("[useLiveSession] analyze failed:", json?.error);
+      }
+    } catch (err) {
+      console.error("[useLiveSession] analyze request failed:", err);
+    } finally {
+      setAnalyzing(false);
+      void endLearningSession(sessionId);
+    }
+  }, []);
+
   const connect = useCallback(async (options?: ConnectOptions) => {
     setStatus("connecting");
     setErrorMessage(null);
     setMessageLog([]);
+    setAnalysis(null);
+    transcriptRef.current = [];
+    analysisTriggeredRef.current = false;
+
+    try {
+      learningSessionIdRef.current = await createLearningSession(
+        "live_chat",
+        ANALYSIS_PROVIDER_ID,
+      );
+    } catch (err) {
+      console.error("[useLiveSession] failed to create learning session:", err);
+      setErrorMessage(err instanceof Error ? err.message : "無法建立練習紀錄，請確認已登入");
+      setStatus("error");
+      return;
+    }
 
     try {
       const tokenRes = await fetch("/api/live/token", { method: "POST" });
@@ -178,12 +239,15 @@ export function useLiveSession(): UseLiveSessionResult {
               return;
             }
 
-            // 逐字稿訊息（方便除錯時確認音訊有沒有被正確辨識，不是必要功能）
+            // 逐字稿訊息：一方面印進 log 方便除錯，一方面累積起來，
+            // 斷線後要送去做事後分析（改進點清單）。
             if (content?.inputTranscription?.text) {
               appendLog(`使用者說：${content.inputTranscription.text}`);
+              transcriptRef.current.push({ role: "user", text: content.inputTranscription.text });
             }
             if (content?.outputTranscription?.text) {
               appendLog(`AI 說：${content.outputTranscription.text}`);
+              transcriptRef.current.push({ role: "coach", text: content.outputTranscription.text });
             }
 
             // 收到串流音訊，排進播放佇列
@@ -207,10 +271,12 @@ export function useLiveSession(): UseLiveSessionResult {
             appendLog(`連線關閉：${e?.reason ?? ""}`);
             setStatus("closed");
             // 這裡的關閉可能是 Gemini 那邊主動斷線（不是使用者按了「結束連線」），
-            // 麥克風跟播放器的資源一樣要清掉，不然會一直佔用麥克風。
+            // 麥克風跟播放器的資源一樣要清掉，不然會一直佔用麥克風，
+            // 逐字稿分析也要照樣觸發，不然使用者這場對話的改進點就沒了。
             stopMic();
             playerRef.current?.close();
             playerRef.current = null;
+            void runAnalysis();
           },
         },
       });
@@ -222,9 +288,9 @@ export function useLiveSession(): UseLiveSessionResult {
       setErrorMessage(err instanceof Error ? err.message : "連線失敗");
       setStatus("error");
     }
-  }, [appendLog, startMic, stopMic]);
+  }, [appendLog, startMic, stopMic, runAnalysis]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     stopMic();
     playerRef.current?.close();
     playerRef.current = null;
@@ -235,7 +301,8 @@ export function useLiveSession(): UseLiveSessionResult {
     }
     sessionRef.current = null;
     setStatus("closed");
-  }, [stopMic]);
+    await runAnalysis();
+  }, [stopMic, runAnalysis]);
 
-  return { status, errorMessage, messageLog, connect, disconnect };
+  return { status, errorMessage, messageLog, analysis, analyzing, connect, disconnect };
 }
