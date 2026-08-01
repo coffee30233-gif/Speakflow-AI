@@ -28,9 +28,13 @@ const ANALYSIS_PROVIDER_ID = "gemini-3-flash-preview";
  * 教練模式的 system instruction。重點是「自然糾正」，不是「打斷考試」——
  * 對話節奏不能被破壞，糾正要像真人教練順口帶過，不是逐句判定對錯。
  *
+ * 這是 Live API 連線唯一的人格設定，不是可選的開關——方向已經確定
+ * （並存架構的「自然對話 / Voice Coach」入口），教練模式就是這個入口的定義，
+ * 不需要讓使用者在「一般對話助理」跟「教練」之間切換。
+ *
  * 注意：這個糾正是「用語音講出來的建議」，不是結構化 JSON——Live API 的原生語音模型
  * 只能輸出語音，沒辦法像 processSpeech() 那樣同時吐出可以存檔、算分數的評分資料。
- * 這是 Live API 跟現有跟讀/面試/Recall 評分流程本質上的差異，不是這次要解決的問題。
+ * 這也是為什麼對話結束後還會另外呼叫 analyzeConversation() 做事後文字分析。
  */
 const COACH_SYSTEM_PROMPT = `你是一位親切、有耐心的英文口說教練，個性溫暖自然，像朋友一樣對話，不是嚴肅的考官。
 
@@ -38,11 +42,6 @@ const COACH_SYSTEM_PROMPT = `你是一位親切、有耐心的英文口說教練
 請用自然、不打斷對話節奏的方式順口糾正——例如「對了，這裡比較自然的說法會是...」，
 糾正完立刻自然地接回對話，不要生硬地停下來說教，也不要每一句話都糾正，
 只挑比較重要、值得學的地方講就好，維持對話的流暢感跟輕鬆感。`;
-
-interface ConnectOptions {
-  /** 開啟後，AI 會在對話中自然糾正文法/用字，不開啟就是一般對話助理 */
-  coachMode?: boolean;
-}
 
 export type LiveSessionStatus =
   | "idle"
@@ -75,7 +74,7 @@ interface UseLiveSessionResult {
   messageLog: LiveMessageLogEntry[];
   analysis: ConversationAnalysis | null;
   analyzing: boolean;
-  connect: (options?: ConnectOptions) => Promise<void>;
+  connect: () => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -186,7 +185,7 @@ export function useLiveSession(): UseLiveSessionResult {
     }
   }, []);
 
-  const connect = useCallback(async (options?: ConnectOptions) => {
+  const connect = useCallback(async () => {
     setStatus("connecting");
     setErrorMessage(null);
     setMessageLog([]);
@@ -222,7 +221,7 @@ export function useLiveSession(): UseLiveSessionResult {
         model: LIVE_MODEL_ID,
         config: {
           responseModalities: [Modality.AUDIO],
-          ...(options?.coachMode ? { systemInstruction: COACH_SYSTEM_PROMPT } : {}),
+          systemInstruction: COACH_SYSTEM_PROMPT,
         },
         callbacks: {
           onopen: () => {

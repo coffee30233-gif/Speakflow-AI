@@ -13,7 +13,7 @@ import { AVAILABLE_PROVIDER_IDS } from "@/lib/ai/provider.factory";
  */
 
 const requestSchema = z.object({
-  mode: z.enum(["shadowing", "freetalk", "scenario", "interview", "recall"]),
+  mode: z.enum(["shadowing", "freetalk", "scenario", "interview", "recall", "live_chat"]),
   // 合法的模型 id 直接從 provider.factory 取得，跟 /api/speech-process 共用同一個來源，
   // 避免兩邊各寫一份列表，改了型號卻忘記同步更新。
   aiModelUsed: z.enum(AVAILABLE_PROVIDER_IDS as [string, ...string[]]),

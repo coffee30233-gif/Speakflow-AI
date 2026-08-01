@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useLiveSession } from "@/hooks/useLiveSession";
 
 export default function LiveSessionDebugPage() {
   const { status, errorMessage, messageLog, analysis, analyzing, connect, disconnect } =
     useLiveSession();
-  const [coachMode, setCoachMode] = useState(false);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 px-5 py-8">
@@ -14,19 +12,9 @@ export default function LiveSessionDebugPage() {
         <h1 className="text-xl font-semibold">Live API 連線實測</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           測試前端 WebSocket 連線＋麥克風串流擷取＋即時語音播放。
-          連線後直接對著手機說話，應該會聽到 AI 用語音回應。
+          連線後直接對著手機說話，AI 會用語音回應，並在對話中自然糾正文法。
         </p>
       </div>
-
-      <label className="bg-card border-border flex items-center gap-2 rounded-lg border p-3 text-sm">
-        <input
-          type="checkbox"
-          checked={coachMode}
-          onChange={(e) => setCoachMode(e.target.checked)}
-          disabled={status === "connecting" || status === "connected"}
-        />
-        教練模式：對話中自然糾正文法/用字
-      </label>
 
       <div className="bg-card border-border rounded-lg border p-3 text-xs">
         <p>
@@ -37,7 +25,7 @@ export default function LiveSessionDebugPage() {
 
       <div className="flex gap-2">
         <button
-          onClick={() => connect({ coachMode })}
+          onClick={connect}
           disabled={status === "connecting" || status === "connected"}
           className="bg-primary text-primary-foreground flex-1 rounded-lg py-3 text-sm font-medium disabled:opacity-50"
         >

@@ -238,6 +238,19 @@ AIProvider 介面  src/lib/ai/types.ts
   - **還沒實測**：這一步沒有真機測試過，邏輯是照既有的 `decomposeStory`／
     `session_turns` 寫入模式做的（同一套已經驗證過的架構），但完整流程
     （連線→對話→斷線→分析→顯示）還需要你實際跑一次確認
+- [x] **緊急修復（2026-08-01）：新增 `live_chat` 模式時漏改一個地方，導致連線直接失敗**：
+  - 實測出現 `狀態：error` / `Invalid request`，訊息紀錄完全是空的——代表連線根本
+    還沒開始就失敗了，不是 WebSocket 或麥克風的問題
+  - 根因：`POST /api/sessions` 的 zod 驗證清單忘記加 `"live_chat"`，導致
+    `useLiveSession` 一開始建立 `learning_sessions` 那步就被擋下來、回傳
+    `{ error: "Invalid request" }`——這就是這次新增模式時要同步改好幾個地方
+    其中一個沒改到，之前加 `"recall"` 模式時也犯過同樣的錯，這次沒有全部檢查到
+  - 已修正，並重新確認過專案裡所有寫死 mode 列舉的地方（`/api/speech-process` 那份
+    刻意不用加，因為 `live_chat` 流程不會呼叫那個端點）
+- [x] **教練模式改為 Live API 連線的預設唯一行為**：
+  - 拿掉「教練模式」勾選框跟 `ConnectOptions`，`COACH_SYSTEM_PROMPT` 現在是每次連線
+    都會帶的固定設定，不再是可選開關——方向已經確定（並存架構的「自然對話」入口），
+    這個入口的定義就是教練人格，不需要讓使用者在「一般助理」跟「教練」間切換
 - [x] **緊急修復（2026-07-31）：Pro 型號撞到 429 配額限制**：
   - 實測面試模式時發現 `gemini-3.1-pro-preview` 回傳 `429`（配額/速率限制），
     preview 型號的免費額度通常非常嚴格
