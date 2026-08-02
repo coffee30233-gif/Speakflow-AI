@@ -302,6 +302,25 @@ AIProvider 介面  src/lib/ai/types.ts
   - 首頁加了「跟教練聊聊 🎙️」入口
   - **架構決策再次確認**：這是**並存**的第三種模式（跟讀/面試/Recall 走既有的
     「錄完再送」評分流程不變），不是取代——`/debug/live-session` 保留作為除錯用途
+- [x] **緊急修復（2026-08-02）：Service Worker 快取誤把跟讀模式內容當成首頁回應**：
+  - 症狀：打開網站根目錄 `/`，畫面直接顯示 `/practice/shadowing` 的內容，「返回」連結點了沒反應
+  - 排除過自動完成網址、瀏覽器一般快取（無痕視窗＋清過站台資料還是重現）
+  - 用 DevTools 的 Network 分頁確認：**每一個請求（包含最上層的 document 本身）
+    都是從 Service Worker 快取回應**，不是網路或瀏覽器快取問題
+  - 懷疑根因：`src/app/sw.ts` 原本用 `@serwist/next` 的 `defaultCache`，
+    它會快取 Next.js App Router 的 RSC（React Server Component）payload，
+    但 RSC 回應非常依賴特定的 request header 才能正確區分「這是哪個路徑的內容」，
+    Service Worker 這層的快取比對邏輯很可能沒處理好這些細節，導致 A 頁面的快取
+    內容被誤植給 B 頁面的請求
+  - **修復**：`sw.ts` 改成完全不快取「頁面導覽」請求，一律直接打網路——犧牲一點
+    離線瀏覽能力，換取「絕對不會顯示錯頁面」的正確性。靜態資源（JS/CSS）維持照常快取
+  - ⚠️ **這裡用到的 `NetworkOnly` 這個 API，沒辦法在這個沒有網路的沙盒環境驗證
+    是不是從 `serwist` 這個套件正確匯出**——照 Workbox（Serwist 的設計依據）的慣例
+    寫的，但這次沒辦法先跑過確認，需要你部署後實測
+  - **你這邊需要做的事**：光是重新部署新程式碼還不夠，你瀏覽器裡舊的、有問題的
+    Service Worker 可能還在跑。部署完之後，麻煩用 DevTools（F12）→ Application →
+    Service Workers，找到那個 worker 按 **Unregister**；再去 Application →
+    Storage → Cache storage，把裡面所有項目刪掉；然後強制重新整理頁面
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。
