@@ -114,6 +114,33 @@ export function useLiveSession(): UseLiveSessionResult {
     setMessageLog((prev) => [...prev.slice(-49), { timestamp: Date.now(), summary }]);
   }, []);
 
+  /**
+   * Live API 的逐字稿是一段一段串流回來的（每次收到的是新片段，不是完整句子），
+   * 如果每段都開一個新的聊天泡泡，畫面會很破碎、很難讀。
+   * 這裡改成：同一個角色（使用者／教練）連續講話時，合併進同一個泡泡，
+   * 換人講話（角色不同）才開新泡泡——比較接近正常聊天軟體的呈現方式。
+   *
+   * 假設片段之間是可以直接串接的（API 端已經處理好斷詞的空格），
+   * 不會額外補空格；如果之後實測發現文字黏在一起沒有空格，
+   * 這裡要改成片段之間補一個空格再串接。
+   */
+  const appendTranscriptFragment = useCallback((role: "user" | "coach", text: string) => {
+    setConversationTranscript((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === role) {
+        return [...prev.slice(0, -1), { role, text: last.text + text }];
+      }
+      return [...prev, { role, text }];
+    });
+
+    const lastRef = transcriptRef.current[transcriptRef.current.length - 1];
+    if (lastRef && lastRef.role === role) {
+      lastRef.text += text;
+    } else {
+      transcriptRef.current.push({ role, text });
+    }
+  }, []);
+
   const stopMic = useCallback(() => {
     workletNodeRef.current?.disconnect();
     workletNodeRef.current = null;
@@ -250,15 +277,11 @@ export function useLiveSession(): UseLiveSessionResult {
             // 斷線後要送去做事後分析（改進點清單）。
             if (content?.inputTranscription?.text) {
               appendLog(`使用者說：${content.inputTranscription.text}`);
-              const entry = { role: "user" as const, text: content.inputTranscription.text };
-              transcriptRef.current.push(entry);
-              setConversationTranscript((prev) => [...prev, entry]);
+              appendTranscriptFragment("user", content.inputTranscription.text);
             }
             if (content?.outputTranscription?.text) {
               appendLog(`AI 說：${content.outputTranscription.text}`);
-              const entry = { role: "coach" as const, text: content.outputTranscription.text };
-              transcriptRef.current.push(entry);
-              setConversationTranscript((prev) => [...prev, entry]);
+              appendTranscriptFragment("coach", content.outputTranscription.text);
             }
 
             // 收到串流音訊，排進播放佇列
@@ -299,7 +322,7 @@ export function useLiveSession(): UseLiveSessionResult {
       setErrorMessage(err instanceof Error ? err.message : "連線失敗");
       setStatus("error");
     }
-  }, [appendLog, startMic, stopMic, runAnalysis]);
+  }, [appendLog, appendTranscriptFragment, startMic, stopMic, runAnalysis]);
 
   const disconnect = useCallback(async () => {
     stopMic();

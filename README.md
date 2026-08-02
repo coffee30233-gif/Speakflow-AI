@@ -321,6 +321,25 @@ AIProvider 介面  src/lib/ai/types.ts
     Service Worker 可能還在跑。部署完之後，麻煩用 DevTools（F12）→ Application →
     Service Workers，找到那個 worker 按 **Unregister**；再去 Application →
     Storage → Cache storage，把裡面所有項目刪掉；然後強制重新整理頁面
+- [x] **修復（2026-08-02）：`src/app/page.tsx`（首頁）內容被誤植成跟讀模式的程式碼**：
+  - 症狀：打開網站根目錄，直接顯示跟讀模式畫面，「返回」點了沒反應
+  - 排查過程：依序排除了瀏覽器快取、PWA Service Worker（一度誤判是這裡，見上面
+    Service Worker 那筆修復紀錄，其實跟這次無關）、Vercel 部署快取、網域設定，
+    最後用 `view-source:` 看伺服器原始回應、直接去 GitHub 對照檔案內容，才抓到真正原因：
+    **`src/app/page.tsx` 的實際內容是跟讀模式頁面的程式碼**（`ShadowingPage` /
+    `ShadowingPracticeClient`），不是首頁該有的內容——多次手動複製貼上程式碼的過程中，
+    在某一次貼錯了檔案
+  - **教訓**：之後如果又遇到「畫面內容跟預期不符」的狀況，第一步應該先去 GitHub
+    直接看該路徑對應檔案的實際內容，會比查快取／部署設定快很多
+  - 已提供正確的 `page.tsx` 內容讓使用者直接在 GitHub 上編輯修正
+- [x] **修復：Live Chat 對話逐字稿顯示破碎，不是完整句子**：
+  - 原因：Live API 的 `inputTranscription` / `outputTranscription` 是**串流回來的片段**，
+    不是等整句講完才給一次，原本的程式碼是「收到一段就開一個新聊天泡泡」，導致畫面破碎
+  - 修復：`useLiveSession.ts` 新增 `appendTranscriptFragment()`，同一個角色
+    （使用者／教練）連續講話時合併進同一個泡泡的文字，換角色才開新泡泡，
+    行為更接近一般聊天軟體
+  - ⚠️ 這裡假設片段之間可以直接串接、不用額外補空格（API 端片段本身應該已經處理好斷詞），
+    這個假設沒辦法在沒有網路的沙盒環境驗證，需要你實測確認文字有沒有黏在一起
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。
