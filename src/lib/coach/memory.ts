@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { MODE_LABEL } from "@/lib/session/labels";
 
 /**
  * 組出「教練記憶」摘要，餵進 prompt 讓 AI 能自然提到使用者過去的練習
@@ -7,15 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * 這只是查資料庫、組句子，不需要為了一段摘要就多花一次 AI API 呼叫。
  */
 
-const MODE_LABEL: Record<string, string> = {
-  shadowing: "跟讀練習",
-  freetalk: "自由對話",
-  scenario: "情境任務",
-  interview: "模擬面試",
-  recall: "Mind Map Recall 練習",
-};
-
-function formatRelativeTime(dateStr: string): string {
+export function formatRelativeTime(dateStr: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays <= 0) return "今天稍早";

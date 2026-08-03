@@ -340,6 +340,22 @@ AIProvider 介面  src/lib/ai/types.ts
     行為更接近一般聊天軟體
   - ⚠️ 這裡假設片段之間可以直接串接、不用額外補空格（API 端片段本身應該已經處理好斷詞），
     這個假設沒辦法在沒有網路的沙盒環境驗證，需要你實測確認文字有沒有黏在一起
+- [x] **`/history` 歷史紀錄頁面**：
+  - `src/lib/session/labels.ts`：把模式標籤（`shadowing`→跟讀練習 等）抽成共用常數，
+    跟 `lib/coach/memory.ts` 共用同一份，避免兩處各寫一份不同步
+  - `lib/coach/memory.ts` 的 `formatRelativeTime()` 改成 export，歷史頁面重用同一套
+    相對時間格式（今天稍早／昨天／N 天前）
+  - `/history`：列表頁，顯示每次練習的模式、時間、輪數、平均發音分數／總分
+  - `/history/[sessionId]`：詳情頁，依模式顯示對應的評分視覺化——重用既有的
+    `PronunciationScoreRing`／`GrammarFeedbackList`／`InterviewEvaluationBars`／
+    `RecallEvaluationBars`／`AudioReplyPlayer`，跟練習當下看到的畫面風格一致，
+    沒有另外做一套歷史紀錄專屬的樣式
+  - 查詢設計：session 列表、`session_turns`、`interview_evaluations`、`recall_attempts`
+    都是批次查詢（用 `.in()` 一次查多筆），不是每個 session／turn 各查一次，
+    避免 N+1 查詢問題
+  - RLS 已經確保使用者只能看到自己的紀錄，詳情頁查不到資料直接當 404 處理，
+    不需要額外判斷擁有權
+  - 首頁加了「查看練習歷史」的入口
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

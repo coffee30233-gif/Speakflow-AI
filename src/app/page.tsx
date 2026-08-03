@@ -37,6 +37,12 @@ export default async function HomePage() {
         >
           跟教練聊聊 🎙️
         </Link>
+        <Link
+          href="/history"
+          className="text-muted-foreground text-center text-xs underline"
+        >
+          查看練習歷史
+        </Link>
       </div>
 
       {user ? (
