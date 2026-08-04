@@ -20,7 +20,8 @@ supabase/
 │   ├── 20260731210100_mind_maps.sql
 │   ├── 20260731230000_recall_attempts.sql
 │   ├── 20260801100000_add_live_chat_mode.sql
-│   └── 20260802120000_coach_notes.sql
+│   ├── 20260802120000_coach_notes.sql
+│   └── 20260802140000_add_resume_text.sql
 ├── schema.sql            # 上面所有 migration 合併成單一檔案，方便手動貼到 SQL Editor
 └── seed.sql              # 範例種子資料（3 個情境任務），供之後開發 scenario 模式測試用
 ```

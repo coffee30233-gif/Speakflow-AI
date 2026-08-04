@@ -753,3 +753,16 @@ create policy "coach_notes_select_own"
 create policy "coach_notes_insert_own"
   on public.coach_notes for insert
   with check (auth.uid() = user_id);
+
+-- ============================================================================
+-- 追加 migration：20260802140000_add_resume_text.sql
+-- ============================================================================
+-- ============================================================================
+-- 0016: profiles 加入 resume_text
+-- ============================================================================
+-- 使用者的履歷內容（純文字貼上，不是檔案上傳），面試模式會把這個內容
+-- 塞進 prompt，讓 AI 面試官問更貼近使用者真實背景的問題。
+-- 一個使用者只有一份履歷，直接加欄位在 profiles，不用另開一張表。
+
+alter table public.profiles
+  add column if not exists resume_text text;

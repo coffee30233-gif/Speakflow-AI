@@ -22,6 +22,7 @@ interface InterviewBaseContext {
   position: string;
   interviewMode: string;
   difficulty: DifficultyLevel;
+  resumeText?: string;
 }
 
 interface UseInterviewPracticeArgs {
@@ -116,6 +117,7 @@ export function useInterviewPractice({
               interviewMode: context.interviewMode,
               difficulty: context.difficulty,
               currentQuestion,
+              resumeText: context.resumeText,
             },
           }),
         });

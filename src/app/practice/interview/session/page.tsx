@@ -65,13 +65,25 @@ export default async function InterviewSessionPage({ searchParams }: InterviewSe
 
   const openingQuestion = getOpeningQuestion(companyId);
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("resume_text")
+    .eq("id", user.id)
+    .single();
+
   return (
     <InterviewSessionClient
       companyDisplayName={companyMeta.displayName}
       position={position}
       interviewMode={interviewMode}
       initialQuestion={openingQuestion}
-      context={{ companyId, position, interviewMode, difficulty }}
+      context={{
+        companyId,
+        position,
+        interviewMode,
+        difficulty,
+        resumeText: profile?.resume_text ?? undefined,
+      }}
     />
   );
 }

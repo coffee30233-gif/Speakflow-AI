@@ -407,6 +407,21 @@ AIProvider 介面  src/lib/ai/types.ts
   - ⚠️ **Live API 的固定聲音沒辦法跟 `GeminiVoiceProvider` 共用同一個常數**：
     後者的檔案有 `server-only` 保護，前者是瀏覽器端程式碼，兩邊各自維護一份
     `"Kore"` 字串，之後如果要換聲音，兩個地方都要記得改
+- [x] **履歷功能（貼上文字，不是檔案上傳）**：
+  - `profiles` 新增 `resume_text` 欄位
+  - **範圍決定**：做「貼上文字」不是真正的檔案上傳（PDF/DOCX 解析）——檔案格式解析
+    容易出錯，而且沒有網路能先測試相關套件，貼文字更可靠，跟之前 Mind Map 寫故事
+    是同一個模式
+  - `/settings/resume`：履歷編輯頁面（`ResumeForm` 元件）
+  - `PATCH /api/profile/resume`：儲存履歷文字
+  - 面試設定頁（`/practice/interview`）加了履歷狀態入口（已設定/未設定）
+  - **打通了一段本來就存在、但從沒被真正接上的資料流**：`interviewContext.resumeText`
+    這個欄位跟 `buildInterviewPrompt()` 裡使用它的邏輯，從最一開始設計就有，
+    但前端一直沒有地方可以真的填這個值——這次補上完整路徑：
+    `session/page.tsx` 查 `profiles.resume_text` → 傳給 `InterviewSessionClient` →
+    `useInterviewPractice` → API 請求 → `buildInterviewPrompt()` 塞進 prompt
+  - **還沒做**：真正的檔案上傳＋自動解析（PDF/DOCX），如果之後真的需要，
+    是獨立的一塊工程，不是這次的範圍
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

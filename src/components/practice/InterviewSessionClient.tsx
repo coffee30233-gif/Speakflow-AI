@@ -21,6 +21,7 @@ interface InterviewSessionClientProps {
     position: string;
     interviewMode: string;
     difficulty: DifficultyLevel;
+    resumeText?: string;
   };
 }
 
