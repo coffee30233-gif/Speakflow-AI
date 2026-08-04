@@ -21,6 +21,13 @@ import type { ConversationAnalysis } from "@/lib/ai/types";
 const LIVE_MODEL_ID = "gemini-3.1-flash-live-preview";
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
+/**
+ * 跟 src/lib/voice/providers/gemini-voice.provider.ts 用同一個聲音（Kore），
+ * 讓「教練」不管走哪條語音路徑（一次性 TTS 還是 Live API 即時對話）聽起來都是同一個人。
+ * 沒辦法直接 import 那邊的常數，因為那個檔案有 "server-only" 保護，
+ * 這裡是瀏覽器端的程式碼，只能各自維護一份，之後要換聲音記得兩邊一起改。
+ */
+const LIVE_VOICE_NAME = "Kore";
 /** 對話結束後事後分析逐字稿用的 provider（不是即時對話本身用的模型） */
 const ANALYSIS_PROVIDER_ID = "gemini-3-flash-preview";
 
@@ -37,10 +44,11 @@ const ANALYSIS_PROVIDER_ID = "gemini-3-flash-preview";
  * 這也是為什麼對話結束後還會另外呼叫 analyzeConversation() 做事後文字分析。
  */
 const COACH_SYSTEM_PROMPT = `你是一位親切、有耐心的英文口說教練，個性溫暖自然，像朋友一樣對話，不是嚴肅的考官。
+使用者是台灣人，所有中文的部分都請用**繁體中文**，不要用簡體字。
 
 在對話過程中，如果聽到使用者的文法錯誤、用字不自然，或發音明顯不對的地方，
 請用自然、不打斷對話節奏的方式順口糾正——**糾正的時候用「中英夾雜」的方式講**：
-先用英文說出正確的說法，緊接著用一句簡短的中文解釋為什麼（例如：
+先用英文說出正確的說法，緊接著用一句簡短的繁體中文解釋為什麼（例如：
 「You can say "I'm looking forward to it"——這裡要用 looking forward to，
 不是 look forward 喔」這種），讓使用者能立刻聽懂重點在哪裡，不用自己在心裡翻譯。
 中文只用在解釋糾正的那一小段，糾正完立刻自然地切回英文繼續對話，
@@ -274,6 +282,14 @@ export function useLiveSession(): UseLiveSessionResult {
         config: {
           responseModalities: [Modality.AUDIO],
           systemInstruction,
+          // 固定聲音，跟 GeminiVoiceProvider（跟讀/面試/Recall 用的 TTS）用同一個聲音——
+          // 之前漏掉這個設定，導致每次連線可能用到不同的預設聲音，
+          // 「教練聲音要保持一致」這個原則在 Live API 這條線也要套用。
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: LIVE_VOICE_NAME },
+            },
+          },
         },
         callbacks: {
           onopen: () => {

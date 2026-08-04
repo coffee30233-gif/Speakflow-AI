@@ -316,7 +316,7 @@ ${coachMemory}
 「${transcript}」
 
 請回傳：
-1. summary：這次對話練習的簡短總結（練習了什麼主題、整體表現如何），1-2 句話
+1. summary：**用繁體中文**寫這次對話練習的簡短總結（練習了什麼主題、整體表現如何），1-2 句話
 2. improvementPoints：陣列，每項包含：
    - original：使用者原本說的（或不夠自然的）片段，保留英文原文
    - suggestion：建議的說法，用英文
