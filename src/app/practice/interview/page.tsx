@@ -1,23 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCompanyMeta } from "@/lib/interview/company-registry";
-import { getOpeningQuestion } from "@/lib/interview/opening-question";
+import { listAllCompanies } from "@/lib/interview/company-registry";
 import { createClient } from "@/lib/supabase/server";
-import { InterviewSessionClient } from "@/components/practice/InterviewSessionClient";
-import type { DifficultyLevel } from "@/lib/interview/types";
+import { InterviewSetupForm } from "@/components/practice/InterviewSetupForm";
 
-interface InterviewSessionPageProps {
-  searchParams: Promise<{
-    company?: string;
-    position?: string;
-    mode?: string;
-    difficulty?: string;
-  }>;
-}
-
-const VALID_DIFFICULTIES: DifficultyLevel[] = ["easy", "medium", "hard"];
-
-export default async function InterviewSessionPage({ searchParams }: InterviewSessionPageProps) {
+export default async function InterviewSetupPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -27,77 +14,50 @@ export default async function InterviewSessionPage({ searchParams }: InterviewSe
     redirect("/login?next=/practice/interview");
   }
 
-  const params = await searchParams;
-  const companyId = params.company ?? "";
-  const position = params.position ?? "";
-  const interviewMode = params.mode ?? "";
-  const difficulty = VALID_DIFFICULTIES.includes(params.difficulty as DifficultyLevel)
-    ? (params.difficulty as DifficultyLevel)
-    : "medium";
-
-  if (!companyId || !position || !interviewMode) {
-    return (
-      <ErrorScreen message="缺少必要的面試設定（公司／職位／面試模式），請從設定頁重新開始。" />
-    );
-  }
-
-  let companyMeta;
-  try {
-    companyMeta = getCompanyMeta(companyId);
-  } catch {
-    return <ErrorScreen message={`找不到公司「${companyId}」的知識庫資料。`} />;
-  }
-
-  if (!companyMeta.supportedPositions.includes(position)) {
-    return (
-      <ErrorScreen
-        message={`「${companyMeta.displayName}」不支援職位「${position}」，請從設定頁重新選擇。`}
-      />
-    );
-  }
-  if (!companyMeta.supportedInterviewModes.includes(interviewMode)) {
-    return (
-      <ErrorScreen
-        message={`「${companyMeta.displayName}」不支援面試模式「${interviewMode}」，請從設定頁重新選擇。`}
-      />
-    );
-  }
-
-  const openingQuestion = getOpeningQuestion(companyId);
+  const companies = listAllCompanies();
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("resume_text")
     .eq("id", user.id)
     .single();
+  const hasResume = !!profile?.resume_text;
 
   return (
-    <InterviewSessionClient
-      companyDisplayName={companyMeta.displayName}
-      position={position}
-      interviewMode={interviewMode}
-      initialQuestion={openingQuestion}
-      context={{
-        companyId,
-        position,
-        interviewMode,
-        difficulty,
-        resumeText: profile?.resume_text ?? undefined,
-      }}
-    />
-  );
-}
+    <main className="mx-auto flex min-h-screen max-w-md flex-col px-5 pt-6 pb-10">
+      <header className="mb-6 flex items-center justify-between">
+        <Link href="/" className="text-muted-foreground text-sm">
+          ← 返回
+        </Link>
+        <span className="bg-secondary text-secondary-foreground rounded-full px-3 py-1 text-xs font-medium">
+          面試教練模式
+        </span>
+      </header>
 
-function ErrorScreen({ message }: { message: string }) {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-5 text-center">
-      <p className="text-destructive text-sm">{message}</p>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold tracking-tight">模擬面試設定</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          選擇公司、職位與面試模式，開始一場模擬面試練習。
+        </p>
+      </div>
+
       <Link
-        href="/practice/interview"
-        className="bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm font-medium"
+        href="/settings/resume"
+        className="bg-card border-border mb-6 flex items-center justify-between rounded-lg border p-3 text-sm"
       >
-        回到設定頁
+        <span>{hasResume ? "✓ 已設定我的履歷" : "+ 貼上我的履歷（選填）"}</span>
+        <span className="text-muted-foreground text-xs">
+          {hasResume ? "編輯" : "設定"} →
+        </span>
       </Link>
+
+      {companies.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          目前還沒有任何公司的知識庫資料，請先在 companies/ 底下新增。
+        </p>
+      ) : (
+        <InterviewSetupForm companies={companies} />
+      )}
     </main>
   );
 }
