@@ -173,4 +173,11 @@ export interface AIProvider {
    * 純文字輸入輸出，事後分析用，不是即時對話當下呼叫的。
    */
   analyzeConversation(transcript: string): Promise<ConversationAnalysis>;
+
+  /**
+   * 練習 session 結束時呼叫，產生一句質化的教練觀察筆記（不是評分，是「模式」）。
+   * 例如「這次面試在描述 Result 時比較簡短，可以多補充量化的成果」，
+   * 累積起來後會餵回 Coach Memory，讓 AI 能講出跨多次練習才看得出來的觀察。
+   */
+  generateSessionNote(context: string): Promise<string>;
 }

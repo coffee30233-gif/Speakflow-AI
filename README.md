@@ -356,6 +356,33 @@ AIProvider 介面  src/lib/ai/types.ts
   - RLS 已經確保使用者只能看到自己的紀錄，詳情頁查不到資料直接當 404 處理，
     不需要額外判斷擁有權
   - 首頁加了「查看練習歷史」的入口
+- [x] **Coach Notes（教練長期質化觀察）**：
+  - 新資料表 `coach_notes`：跟 `buildCoachMemoryContext()` 原本的量化統計互補——
+    分數告訴 AI「表現如何」，Coach Notes 告訴 AI「表現的樣子」（例如「常常漏講
+    Result 部分」這種可以跨多次練習提醒使用者的模式，不是單次分數）
+  - `AIProvider` 新增 `generateSessionNote(context)`，`GeminiProvider` 用 Flash
+    型號實作（練習結束後的輕量任務，不需要 Pro 層級）
+  - `ChatService.generateSessionNote()`：練習結束時觸發，整個過程（查資料＋呼叫 AI＋
+    寫入）都包在 `after()` 背景任務裡——結束 session 這個動作不需要讓使用者等
+    筆記產生完，這是給「未來的自己」用的
+  - **Live Chat 模式沒有另外呼叫 AI 產生筆記**：直接重用 `analyzeConversation()`
+    已經算好的 `summary` 當作 Coach Note，避免為了一則筆記多花一次 AI 呼叫；
+    `PATCH /api/sessions/[id]` 結束 session 時特別排除 `live_chat` 模式，
+    避免跟這個既有邏輯重複寫兩次筆記
+  - `buildCoachMemoryContext()` 現在會一併查最近 3 則 Coach Notes，
+    附加在教練記憶摘要後面，讓面試/Recall/Live Chat 的開場問候跟對話
+    都能參考到這些長期觀察，不只是最近幾次的分數統計
+- [x] **Live Chat 教練糾正改成中英夾雜**：
+  - `COACH_SYSTEM_PROMPT` 調整：糾正時先用英文講正確說法，緊接著一句簡短中文解釋原因，
+    讓使用者不用自己在心裡翻譯就能立刻聽懂重點；中文只用在解釋那一小段，
+    糾正完立刻切回英文繼續對話，維持練英文口說的主要目的
+- [x] **文法回饋（grammarFeedback）的 reason 欄位統一改成繁體中文**：
+  - 實測發現：Live Chat 事後分析（`analyzeConversation`）產生的 `reason` 欄位有時候是英文，
+    使用者要自己翻譯才看得懂，不夠直覺
+  - 統一修正四個會產生 `grammarFeedback` 的 prompt（跟讀/自由對話/情境、面試、
+    Mind Map Recall、Live Chat 事後分析），明確要求 `original`／`suggestion` 保留英文原文，
+    但 `reason` 一律用繁體中文解釋
+  - 這是主動一次修完全部四處，不是只修使用者回報的那一個，避免其他模式之後才被發現一樣的問題
 - [ ] **Groq Provider（暫緩）**：查證後發現 Groq 的聊天模型目前不支援原生音訊輸入
   （跟 Gemini/GPT 不一樣，需要內部另外呼叫 Whisper 轉文字再丟給 LLM，會是兩次 API 呼叫、
   行為模式跟其他 Provider 不一致）。已決定**先不接**，等 Groq 官方支援原生音訊輸入再做。

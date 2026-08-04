@@ -53,4 +53,9 @@ export class OpenAIProvider implements AIProvider {
     void transcript;
     throw new Error("OpenAIProvider.analyzeConversation: not yet implemented");
   }
+
+  async generateSessionNote(context: string): Promise<string> {
+    void context;
+    throw new Error("OpenAIProvider.generateSessionNote: not yet implemented");
+  }
 }

@@ -57,5 +57,21 @@ export async function buildCoachMemoryContext(
       : `- ${timeLabel}：${modeLabel}`;
   });
 
-  return `這是使用者最近的練習紀錄（教練記憶，可以自然地在對話中適度提及，不用每次都提，避免生硬）：\n${lines.join("\n")}`;
+  let result = `這是使用者最近的練習紀錄（教練記憶，可以自然地在對話中適度提及，不用每次都提，避免生硬）：\n${lines.join("\n")}`;
+
+  // Coach Notes：質化的長期觀察（例如「常常漏講 Result 部分」這種模式），
+  // 跟上面的分數統計互補——分數告訴你「表現如何」，這個告訴你「表現的樣子」。
+  const { data: notes } = await supabase
+    .from("coach_notes")
+    .select("note_text")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  if (notes && notes.length > 0) {
+    const noteLines = notes.map((n) => `- ${n.note_text}`).join("\n");
+    result += `\n\n教練過去對這位使用者的觀察筆記（可以在合適的時機自然提到，不用每次都提）：\n${noteLines}`;
+  }
+
+  return result;
 }

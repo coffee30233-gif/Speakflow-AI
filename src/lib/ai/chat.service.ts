@@ -247,6 +247,17 @@ export class ChatService {
         console.error("[ChatService] failed to write session_turns (live_chat):", turnError);
       }
 
+      // Coach Notes：直接重用剛剛已經算好的 analysis.summary 當作教練筆記，
+      // 不用為了寫一則筆記又多打一次 AI API——這段對話的總結本來就是很好的觀察紀錄。
+      const { error: noteError } = await supabase.from("coach_notes").insert({
+        user_id: meta.userId,
+        session_id: meta.sessionId,
+        note_text: analysis.summary,
+      });
+      if (noteError) {
+        console.error("[ChatService] failed to write coach_notes (live_chat):", noteError);
+      }
+
       try {
         const admin = createAdminClient();
         const { error: usageError } = await admin.from("usage_logs").insert({
@@ -306,6 +317,54 @@ export class ChatService {
     });
 
     return result;
+  }
+
+  /**
+   * 練習 session 結束時呼叫，產生一則質化的教練觀察筆記（不是分數，是「模式」），
+   * 存進 coach_notes，之後會被 buildCoachMemoryContext() 讀取、餵回未來的練習。
+   *
+   * 整個過程（查資料＋呼叫 AI＋寫入）都包在 after() 裡——結束 session 這個動作
+   * 不需要讓使用者等這則筆記產生完，這是給「未來的自己」用的，不是當下要看的東西。
+   */
+  generateSessionNote(
+    providerId: string,
+    sessionId: string,
+    userId: string,
+    supabase: SupabaseClient,
+  ): void {
+    after(async () => {
+      try {
+        const { data: turns } = await supabase
+          .from("session_turns")
+          .select("turn_index, transcript, pronunciation_score, ai_reply_text")
+          .eq("session_id", sessionId)
+          .order("turn_index", { ascending: true });
+
+        if (!turns || turns.length === 0) return;
+
+        const context = turns
+          .map((t) => {
+            const scorePart =
+              t.pronunciation_score != null ? `（發音 ${t.pronunciation_score} 分）` : "";
+            return `第 ${t.turn_index + 1} 輪 - 使用者：${t.transcript ?? ""}${scorePart}`;
+          })
+          .join("\n");
+
+        const provider = getAIProvider(providerId);
+        const noteText = await provider.generateSessionNote(context);
+
+        const { error } = await supabase.from("coach_notes").insert({
+          user_id: userId,
+          session_id: sessionId,
+          note_text: noteText,
+        });
+        if (error) {
+          console.error("[ChatService] failed to write coach_notes:", error);
+        }
+      } catch (err) {
+        console.error("[ChatService] generateSessionNote failed:", err);
+      }
+    });
   }
 }
 

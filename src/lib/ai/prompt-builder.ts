@@ -23,7 +23,8 @@ function buildModePrompt(input: SpeechProcessInput): string {
   const base = `你是一位專業的英文口說教練。請針對使用者的語音輸入，回傳以下結構化資訊：
 1. transcript：語音的逐字稿
 2. pronunciationScore：發音評分（0-100）
-3. grammarFeedback：文法／用字修正建議（陣列，若無錯誤則為空陣列）
+3. grammarFeedback：文法／用字修正建議（陣列，若無錯誤則為空陣列）。original/suggestion 保留英文原文，
+   reason 欄位請用**繁體中文**解釋，讓使用者不用自己翻譯就能立刻看懂重點
 4. aiReplyText：以教練口吻給予的簡短回應或延續對話的下一句`;
 
   switch (input.mode) {

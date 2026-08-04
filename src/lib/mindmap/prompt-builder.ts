@@ -36,7 +36,8 @@ export function buildRecallPrompt(context: RecallContext): string {
 請根據使用者剛剛的語音回答，回傳以下結構化資訊：
 1. transcript：使用者回答的逐字稿
 2. pronunciationScore：發音評分（0-100）
-3. grammarFeedback：文法／用字修正建議（陣列，若無錯誤則為空陣列）
+3. grammarFeedback：文法／用字修正建議（陣列，若無錯誤則為空陣列）。original/suggestion 保留英文原文，
+   reason 欄位請用**繁體中文**解釋，讓使用者不用自己翻譯就能立刻看懂重點
 4. aiReplyText：教練口吻的簡短鼓勵與回饋，重點放在「這次回憶起來的感覺如何」，
    不要用「你答錯了」這種語氣，即使沒講到某些重點，也是用「下次可以試著多想一下 XX 部分」的鼓勵方式
 5. recallEvaluation：

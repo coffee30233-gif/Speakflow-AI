@@ -318,9 +318,9 @@ ${coachMemory}
 請回傳：
 1. summary：這次對話練習的簡短總結（練習了什麼主題、整體表現如何），1-2 句話
 2. improvementPoints：陣列，每項包含：
-   - original：使用者原本說的（或不夠自然的）片段
-   - suggestion：建議的說法
-   - reason：為什麼這樣改比較好`;
+   - original：使用者原本說的（或不夠自然的）片段，保留英文原文
+   - suggestion：建議的說法，用英文
+   - reason：**用繁體中文**解釋為什麼這樣改比較好，讓使用者不用自己翻譯就能立刻看懂重點`;
 
     const response = await this.client.models.generateContent({
       model: MODEL_ID,
@@ -371,5 +371,30 @@ ${coachMemory}
     }
 
     return result.data;
+  }
+
+  async generateSessionNote(context: string): Promise<string> {
+    const prompt = `你是一位英文口說教練，正在為一場剛結束的練習寫一句簡短的內部觀察筆記
+（給你自己之後參考用的，不是要唸給使用者聽的講稿）。
+
+這次練習的內容：
+${context}
+
+請用繁體中文寫 1 句話（最多 40 字），記錄一個值得注意的「模式」或「傾向」，
+不是單純重複分數，而是像「回答技術問題時常常跳過舉例」「STAR 結構裡 Result 部分講得比較簡短」
+這種可以在未來練習中提醒使用者的觀察。如果這次表現很平均、沒有特別明顯的模式，
+就寫一句正向鼓勵的話即可，不要硬找問題。
+直接回傳這句話本身，不要加任何前綴、標籤或引號。`;
+
+    const response = await this.client.models.generateContent({
+      model: MODEL_ID,
+      contents: [{ text: prompt }],
+    });
+
+    const text = response.text;
+    if (!text) {
+      throw new Error("GeminiProvider.generateSessionNote: model returned an empty response");
+    }
+    return text.trim();
   }
 }
