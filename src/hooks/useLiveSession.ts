@@ -162,7 +162,19 @@ export function useLiveSession(): UseLiveSessionResult {
     await audioContext.audioWorklet.addModule("/worklets/pcm-recorder-processor.js");
 
     const micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, sampleRate: INPUT_SAMPLE_RATE },
+      audio: {
+        channelCount: 1,
+        sampleRate: INPUT_SAMPLE_RATE,
+        // 明確開啟回音消除／降噪／自動增益——如果沒開，教練從喇叭播出來的聲音
+        // 很容易被麥克風收回去，Gemini 的語音活動偵測會誤判成「使用者開始講話」，
+        // 觸發 interrupted，把教練還沒講完的話直接切斷。
+        // 注意：這些是「建議」不是「保證」，Web Audio API 的自訂播放路徑
+        // 不一定能被瀏覽器的回音消除機制完整涵蓋，效果有限——
+        // 真的要徹底解決，還是需要使用者戴耳機（見頁面上的提示文字）。
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
     });
     micStreamRef.current = micStream;
 

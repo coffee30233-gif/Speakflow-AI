@@ -1,18 +1,23 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { listAllCompanies } from "@/lib/interview/company-registry";
+import { getCompanyMeta } from "@/lib/interview/company-registry";
+import { getOpeningQuestion } from "@/lib/interview/opening-question";
 import { createClient } from "@/lib/supabase/server";
-import { InterviewSetupForm } from "@/components/practice/InterviewSetupForm";
+import { InterviewSessionClient } from "@/components/practice/InterviewSessionClient";
+import type { DifficultyLevel } from "@/lib/interview/types";
 
-/**
- * Server Component：先確認登入狀態（面試結果現在會寫進資料庫，需要 user_id），
- * 沒登入就導去 /login。同時直接呼叫 listAllCompanies()（底層用 fs 讀 companies/ 資料夾），
- * 把結果當作純資料傳給 Client Component。
- *
- * 這樣設計的好處：新增公司時，這個頁面完全不用改，
- * listAllCompanies() 會自動反映 companies/ 底下有哪些資料夾。
- */
-export default async function InterviewSetupPage() {
+interface InterviewSessionPageProps {
+  searchParams: Promise<{
+    company?: string;
+    position?: string;
+    mode?: string;
+    difficulty?: string;
+  }>;
+}
+
+const VALID_DIFFICULTIES: DifficultyLevel[] = ["easy", "medium", "hard"];
+
+export default async function InterviewSessionPage({ searchParams }: InterviewSessionPageProps) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -22,33 +27,65 @@ export default async function InterviewSetupPage() {
     redirect("/login?next=/practice/interview");
   }
 
-  const companies = listAllCompanies();
+  const params = await searchParams;
+  const companyId = params.company ?? "";
+  const position = params.position ?? "";
+  const interviewMode = params.mode ?? "";
+  const difficulty = VALID_DIFFICULTIES.includes(params.difficulty as DifficultyLevel)
+    ? (params.difficulty as DifficultyLevel)
+    : "medium";
+
+  if (!companyId || !position || !interviewMode) {
+    return (
+      <ErrorScreen message="缺少必要的面試設定（公司／職位／面試模式），請從設定頁重新開始。" />
+    );
+  }
+
+  let companyMeta;
+  try {
+    companyMeta = getCompanyMeta(companyId);
+  } catch {
+    return <ErrorScreen message={`找不到公司「${companyId}」的知識庫資料。`} />;
+  }
+
+  if (!companyMeta.supportedPositions.includes(position)) {
+    return (
+      <ErrorScreen
+        message={`「${companyMeta.displayName}」不支援職位「${position}」，請從設定頁重新選擇。`}
+      />
+    );
+  }
+  if (!companyMeta.supportedInterviewModes.includes(interviewMode)) {
+    return (
+      <ErrorScreen
+        message={`「${companyMeta.displayName}」不支援面試模式「${interviewMode}」，請從設定頁重新選擇。`}
+      />
+    );
+  }
+
+  const openingQuestion = getOpeningQuestion(companyId);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col px-5 pt-6 pb-10">
-      <header className="mb-6 flex items-center justify-between">
-        <Link href="/" className="text-muted-foreground text-sm">
-          ← 返回
-        </Link>
-        <span className="bg-secondary text-secondary-foreground rounded-full px-3 py-1 text-xs font-medium">
-          面試教練模式
-        </span>
-      </header>
+    <InterviewSessionClient
+      companyDisplayName={companyMeta.displayName}
+      position={position}
+      interviewMode={interviewMode}
+      initialQuestion={openingQuestion}
+      context={{ companyId, position, interviewMode, difficulty }}
+    />
+  );
+}
 
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">模擬面試設定</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          選擇公司、職位與面試模式，開始一場模擬面試練習。
-        </p>
-      </div>
-
-      {companies.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          目前還沒有任何公司的知識庫資料，請先在 companies/ 底下新增。
-        </p>
-      ) : (
-        <InterviewSetupForm companies={companies} />
-      )}
+function ErrorScreen({ message }: { message: string }) {
+  return (
+    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-5 text-center">
+      <p className="text-destructive text-sm">{message}</p>
+      <Link
+        href="/practice/interview"
+        className="bg-primary text-primary-foreground rounded-lg px-6 py-3 text-sm font-medium"
+      >
+        回到設定頁
+      </Link>
     </main>
   );
 }
